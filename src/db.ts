@@ -21,6 +21,7 @@ export interface Workout {
   startedAt: string      // ISO datetime
   completedAt?: string
   notes?: string
+  planId?: number        // FK to WorkoutPlan if started from a plan
 }
 
 export interface ExerciseSet {
@@ -111,6 +112,29 @@ export interface FavoriteMeal {
   usageCount: number
 }
 
+export interface PlannedExercise {
+  exerciseId: string       // stable ID or custom-generated ID
+  name: string
+  targetSets: number
+  targetReps?: number
+  targetDuration?: number  // seconds
+  targetWeight?: number
+  hasBandResistance?: boolean
+  coachingNotes?: string   // "watch left knee tracking", "slow 3-4 sec eccentric"
+}
+
+export interface WorkoutPlan {
+  id?: number
+  name: string
+  createdAt: string        // ISO datetime
+  exercises: PlannedExercise[]
+  includeRun: boolean
+  runNotes?: string        // "Easy jog to gym, 12-15 min"
+  includeRow: boolean
+  rowNotes?: string        // "Zone 2, HR 130-145, damper 3-5"
+  generalNotes?: string    // overall plan notes
+}
+
 // --- Database ---
 
 class HealthTrackerDB extends Dexie {
@@ -122,6 +146,7 @@ class HealthTrackerDB extends Dexie {
   dailyCheckIns!: Table<DailyCheckIn>
   mealLogs!: Table<MealLog>
   favoriteMeals!: Table<FavoriteMeal>
+  workoutPlans!: Table<WorkoutPlan>
 
   constructor() {
     super('HealthTrackerDB')
@@ -134,6 +159,17 @@ class HealthTrackerDB extends Dexie {
       dailyCheckIns: '++id, &date',
       mealLogs: '++id, date, [date+timeOfDay]',
       favoriteMeals: '++id, name, usageCount',
+    })
+    this.version(2).stores({
+      workouts: '++id, date, type, [date+type]',
+      exerciseSets: '++id, workoutId, exerciseId, [workoutId+exerciseId]',
+      runDetails: '++id, workoutId',
+      rowDetails: '++id, workoutId',
+      yogaMobilityDetails: '++id, workoutId',
+      dailyCheckIns: '++id, &date',
+      mealLogs: '++id, date, [date+timeOfDay]',
+      favoriteMeals: '++id, name, usageCount',
+      workoutPlans: '++id, name, createdAt',
     })
   }
 }

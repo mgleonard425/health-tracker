@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { format } from 'date-fns'
-import { Dumbbell, Footprints, Timer, Heart, ClipboardCheck, Waves, Shuffle } from 'lucide-react'
+import { Dumbbell, Footprints, Timer, Heart, ClipboardCheck, Waves, Shuffle, Play, FileText } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -40,6 +40,11 @@ export function TodayPage() {
 
   const todayWorkouts = useLiveQuery(
     () => db.workouts.where('date').equals(today).toArray(),
+    []
+  )
+
+  const workoutPlans = useLiveQuery(
+    () => db.workoutPlans.orderBy('createdAt').reverse().toArray(),
     []
   )
 
@@ -104,6 +109,79 @@ export function TodayPage() {
           ))}
         </div>
       </div>
+
+      {/* Saved Workout Plans */}
+      {workoutPlans && workoutPlans.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Workout Plans</h2>
+            <button onClick={() => navigate('/plans')} className="text-xs text-muted-foreground underline">
+              Manage
+            </button>
+          </div>
+          <div className="space-y-2">
+            {workoutPlans.slice(0, 3).map(plan => (
+              <Card key={plan.id} className="cursor-pointer" onClick={() => navigate('/plans')}>
+                <CardContent className="py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-muted-foreground" />
+                    <div>
+                      <span className="font-medium text-sm">{plan.name}</span>
+                      <div className="text-xs text-muted-foreground">
+                        {plan.exercises.length} exercises{plan.includeRun ? ' + Run' : ''}{plan.includeRow ? ' + Row' : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      const now = new Date()
+                      const workoutId = await db.workouts.add({
+                        date: format(now, 'yyyy-MM-dd'),
+                        type: 'custom',
+                        startedAt: now.toISOString(),
+                        notes: `Plan: ${plan.name}`,
+                        planId: plan.id,
+                      })
+                      for (const ex of plan.exercises) {
+                        for (let s = 0; s < ex.targetSets; s++) {
+                          await db.exerciseSets.add({
+                            workoutId: workoutId as number,
+                            exerciseId: ex.exerciseId,
+                            setNumber: s + 1,
+                            weight: ex.targetWeight,
+                            weightUnit: 'lbs',
+                            reps: ex.targetReps,
+                            duration: ex.targetDuration,
+                            completed: false,
+                          })
+                        }
+                      }
+                      navigate(`/workout/${workoutId}`)
+                    }}
+                  >
+                    <Play className="w-4 h-4 mr-1" />
+                    Start
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          {workoutPlans.length > 3 && (
+            <button onClick={() => navigate('/plans')} className="text-xs text-muted-foreground underline mt-1">
+              View all {workoutPlans.length} plans
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Create Plan shortcut */}
+      <Button variant="outline" className="w-full" onClick={() => navigate('/plans/new')}>
+        <FileText className="w-4 h-4 mr-2" />
+        Create Workout Plan
+      </Button>
 
       {/* Daily Check-In */}
       <Button

@@ -55,6 +55,12 @@ export function WorkoutActivePage() {
   const [includeRow, setIncludeRow] = useState(false)
   const [buildPhase, setBuildPhase] = useState(true) // true = picking exercises, false = logging
 
+  // Plan coaching notes
+  const [coachingNotes, setCoachingNotes] = useState<Record<string, string>>({})
+  const [planRunNotes, setPlanRunNotes] = useState<string>('')
+  const [planRowNotes, setPlanRowNotes] = useState<string>('')
+  const [planGeneralNotes, setPlanGeneralNotes] = useState<string>('')
+
   const isCustom = workout?.type === 'custom'
   const exercises = isCustom ? customExercises : (workout ? getExercisesForWorkoutType(workout.type) : [])
   const isPrehab = workout?.type === 'prehab'
@@ -137,8 +143,66 @@ export function WorkoutActivePage() {
   // Initialize custom workout from saved sets (re-opening a completed custom workout)
   useEffect(() => {
     if (!workout || !isCustom || initialized) return
+    const currentPlanId = workout.planId
 
     async function initCustom() {
+      // Load plan coaching notes if started from a plan
+      if (currentPlanId) {
+        const plan = await db.workoutPlans.get(currentPlanId)
+        if (plan) {
+          const notes: Record<string, string> = {}
+          for (const ex of plan.exercises) {
+            if (ex.coachingNotes) notes[ex.exerciseId] = ex.coachingNotes
+          }
+          setCoachingNotes(notes)
+          if (plan.runNotes) setPlanRunNotes(plan.runNotes)
+          if (plan.rowNotes) setPlanRowNotes(plan.rowNotes)
+          if (plan.generalNotes) setPlanGeneralNotes(plan.generalNotes)
+          setIncludeRun(plan.includeRun)
+          setIncludeRow(plan.includeRow)
+
+          // Build exercise list from plan (preserves plan order)
+          const planExercises: ExerciseTemplate[] = plan.exercises.map(pe => {
+            const template = allExerciseTemplates.find(t => t.id === pe.exerciseId)
+            return template || {
+              id: pe.exerciseId,
+              name: pe.name,
+              defaultSets: pe.targetSets,
+              defaultReps: pe.targetReps,
+              defaultDuration: pe.targetDuration,
+              weightUnit: 'lbs' as const,
+              hasBandResistance: pe.hasBandResistance,
+            }
+          })
+
+          // Check for existing sets (already saved from plan start)
+          const existingSets = await getExerciseSetsForWorkout(workoutId)
+          if (existingSets.length > 0) {
+            const map: ExerciseSetsMap = {}
+            for (const ex of planExercises) {
+              const saved = existingSets.filter(s => s.exerciseId === ex.id)
+              map[ex.id] = saved.length > 0
+                ? saved.map(s => ({
+                    weight: s.weight,
+                    reps: s.reps,
+                    duration: s.duration,
+                    bandResistance: s.bandResistance,
+                    completed: s.completed,
+                    notes: s.notes,
+                  }))
+                : createDefaultSets(ex)
+            }
+            setExerciseSets(map)
+          }
+
+          setCustomExercises(planExercises)
+          setCustomSelectedIds(new Set(planExercises.map(e => e.id)))
+          setBuildPhase(false)
+          setInitialized(true)
+          return
+        }
+      }
+
       const existingSets = await getExerciseSetsForWorkout(workoutId)
       if (existingSets.length > 0) {
         // Rebuild the exercise list from saved data
@@ -396,24 +460,42 @@ export function WorkoutActivePage() {
         </>
       )}
 
+      {/* Plan general notes */}
+      {isCustom && !buildPhase && planGeneralNotes && (
+        <div className="bg-secondary rounded-lg px-3 py-2 text-sm text-muted-foreground italic">
+          {planGeneralNotes}
+        </div>
+      )}
+
       {/* Custom workout: log phase — exercises */}
-      {isCustom && !buildPhase && customExercises.map((ex) => (
-        <ExerciseCard
-          key={ex.id}
-          exercise={ex}
-          sets={exerciseSets[ex.id] || []}
-          lastSessionSets={lastSessionData[ex.id]}
-          onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
-          onAddSet={() => handleAddSet(ex.id)}
-          onRemoveSet={() => handleRemoveSet(ex.id)}
-          isPrehab={ex.hasBandResistance}
-        />
-      ))}
+      {isCustom && !buildPhase && customExercises.map((ex) => {
+        const coaching = coachingNotes[ex.id]
+        const exerciseWithNotes = coaching
+          ? { ...ex, notes: coaching + (ex.notes ? ` | ${ex.notes}` : '') }
+          : ex
+        return (
+          <ExerciseCard
+            key={ex.id}
+            exercise={exerciseWithNotes}
+            sets={exerciseSets[ex.id] || []}
+            lastSessionSets={lastSessionData[ex.id]}
+            onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
+            onAddSet={() => handleAddSet(ex.id)}
+            onRemoveSet={() => handleRemoveSet(ex.id)}
+            isPrehab={ex.hasBandResistance}
+          />
+        )
+      })}
 
       {/* Custom workout: log phase — run */}
       {isCustom && !buildPhase && includeRun && (
         <>
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide pt-2">Run</h2>
+          {planRunNotes && (
+            <div className="bg-secondary rounded-lg px-3 py-2 text-sm text-muted-foreground italic">
+              {planRunNotes}
+            </div>
+          )}
           <RunForm workoutId={workoutId} onFinish={handleFinish} embedded />
         </>
       )}
@@ -422,6 +504,11 @@ export function WorkoutActivePage() {
       {isCustom && !buildPhase && includeRow && (
         <>
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide pt-2">Row</h2>
+          {planRowNotes && (
+            <div className="bg-secondary rounded-lg px-3 py-2 text-sm text-muted-foreground italic">
+              {planRowNotes}
+            </div>
+          )}
           <RowForm workoutId={workoutId} onFinish={handleFinish} />
         </>
       )}

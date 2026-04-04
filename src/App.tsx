@@ -8,6 +8,8 @@ import { DashboardPage } from '@/pages/DashboardPage'
 import { PlanPage } from '@/pages/PlanPage'
 import { HistoryPage } from '@/pages/HistoryPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { WorkoutPlansPage } from '@/pages/WorkoutPlansPage'
+import { PlanWorkoutPage } from '@/pages/PlanWorkoutPage'
 
 export default function App() {
   return (
@@ -19,6 +21,9 @@ export default function App() {
         <Route path="/checkin" element={<CheckInPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/plan" element={<PlanPage />} />
+        <Route path="/plans" element={<WorkoutPlansPage />} />
+        <Route path="/plans/new" element={<PlanWorkoutPage />} />
+        <Route path="/plans/edit/:id" element={<PlanWorkoutPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>
