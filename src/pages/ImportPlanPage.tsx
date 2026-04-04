@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CheckCircle, AlertCircle, Dumbbell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -8,20 +8,22 @@ import { decodePlan } from '@/lib/plan-sharing'
 
 export function ImportPlanPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading')
   const [planName, setPlanName] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
 
   useEffect(() => {
     async function importPlan() {
-      const hash = window.location.hash.slice(1) // strip the #
-      if (!hash) {
+      // Try query param first (?p=...), fall back to hash (#...)
+      const encoded = searchParams.get('p') || window.location.hash.slice(1)
+      if (!encoded) {
         setStatus('error')
         setErrorMsg('No plan data found in the URL.')
         return
       }
 
-      const plan = decodePlan(hash)
+      const plan = decodePlan(encoded)
       if (!plan) {
         setStatus('error')
         setErrorMsg('Could not decode the plan. The link may be corrupted.')
