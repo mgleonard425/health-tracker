@@ -1,21 +1,35 @@
 import type { WorkoutPlan } from '@/db'
 
 /**
+ * URL-safe base64 encode (replaces +/= with URL-safe chars)
+ */
+function toBase64Url(str: string): string {
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+/**
+ * URL-safe base64 decode
+ */
+function fromBase64Url(str: string): string {
+  let base64 = str.replace(/-/g, '+').replace(/_/g, '/')
+  while (base64.length % 4) base64 += '='
+  return atob(base64)
+}
+
+/**
  * Encodes a workout plan into a URL-safe base64 string.
- * Strips the `id` and `createdAt` since those get regenerated on import.
  */
 export function encodePlan(plan: WorkoutPlan): string {
   const portable = {
-    name: plan.name,
-    sections: plan.sections,
-    generalNotes: plan.generalNotes,
+    n: plan.name,
+    s: plan.sections,
+    g: plan.generalNotes,
   }
   const json = JSON.stringify(portable)
-  // Use btoa for base64 encoding, handling unicode via encodeURIComponent
-  const encoded = btoa(encodeURIComponent(json).replace(/%([0-9A-F]{2})/g, (_match, p1) =>
-    String.fromCharCode(parseInt(p1, 16))
-  ))
-  return encoded
+  // Handle unicode: encode to URI component bytes, then base64
+  const bytes = new TextEncoder().encode(json)
+  const binaryStr = Array.from(bytes, b => String.fromCharCode(b)).join('')
+  return toBase64Url(binaryStr)
 }
 
 /**
@@ -23,12 +37,29 @@ export function encodePlan(plan: WorkoutPlan): string {
  */
 export function decodePlan(encoded: string): Omit<WorkoutPlan, 'id' | 'createdAt'> | null {
   try {
-    const json = decodeURIComponent(
-      Array.from(atob(encoded), c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
-    )
+    const binaryStr = fromBase64Url(encoded)
+    const bytes = new Uint8Array(binaryStr.length)
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i)
+    }
+    const json = new TextDecoder().decode(bytes)
     const parsed = JSON.parse(json)
-    if (!parsed.name || !parsed.sections) return null
-    return parsed
+
+    // Handle compact format
+    if (parsed.n && parsed.s) {
+      return {
+        name: parsed.n,
+        sections: parsed.s,
+        generalNotes: parsed.g,
+      }
+    }
+
+    // Handle full format (backwards compat)
+    if (parsed.name && parsed.sections) {
+      return parsed
+    }
+
+    return null
   } catch {
     return null
   }
