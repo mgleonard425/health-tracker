@@ -123,15 +123,21 @@ export interface PlannedExercise {
   coachingNotes?: string   // "watch left knee tracking", "slow 3-4 sec eccentric"
 }
 
+export type PlanSectionType = 'exercises' | 'run' | 'row'
+
+export interface PlanSection {
+  id: string               // unique within the plan (e.g., "section-1")
+  name: string             // "Warmup", "Cardio A", "Strength", etc.
+  type: PlanSectionType
+  exercises: PlannedExercise[]  // populated for 'exercises' type
+  notes?: string           // section-level notes (run/row instructions, or general notes)
+}
+
 export interface WorkoutPlan {
   id?: number
   name: string
   createdAt: string        // ISO datetime
-  exercises: PlannedExercise[]
-  includeRun: boolean
-  runNotes?: string        // "Easy jog to gym, 12-15 min"
-  includeRow: boolean
-  rowNotes?: string        // "Zone 2, HR 130-145, damper 3-5"
+  sections: PlanSection[]
   generalNotes?: string    // overall plan notes
 }
 

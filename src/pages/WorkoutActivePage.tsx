@@ -55,11 +55,11 @@ export function WorkoutActivePage() {
   const [includeRow, setIncludeRow] = useState(false)
   const [buildPhase, setBuildPhase] = useState(true) // true = picking exercises, false = logging
 
-  // Plan coaching notes
+  // Plan data
   const [coachingNotes, setCoachingNotes] = useState<Record<string, string>>({})
-  const [planRunNotes, setPlanRunNotes] = useState<string>('')
-  const [planRowNotes, setPlanRowNotes] = useState<string>('')
   const [planGeneralNotes, setPlanGeneralNotes] = useState<string>('')
+  const [planSections, setPlanSections] = useState<{ name: string; type: string; exerciseIds: string[]; notes?: string }[]>([])
+  const hasPlanSections = planSections.length > 0
 
   const isCustom = workout?.type === 'custom'
   const exercises = isCustom ? customExercises : (workout ? getExercisesForWorkoutType(workout.type) : [])
@@ -149,31 +149,42 @@ export function WorkoutActivePage() {
       // Load plan coaching notes if started from a plan
       if (currentPlanId) {
         const plan = await db.workoutPlans.get(currentPlanId)
-        if (plan) {
+        if (plan && plan.sections) {
+          // Build coaching notes, sections, and exercise list from plan sections
           const notes: Record<string, string> = {}
-          for (const ex of plan.exercises) {
-            if (ex.coachingNotes) notes[ex.exerciseId] = ex.coachingNotes
-          }
-          setCoachingNotes(notes)
-          if (plan.runNotes) setPlanRunNotes(plan.runNotes)
-          if (plan.rowNotes) setPlanRowNotes(plan.rowNotes)
-          if (plan.generalNotes) setPlanGeneralNotes(plan.generalNotes)
-          setIncludeRun(plan.includeRun)
-          setIncludeRow(plan.includeRow)
+          const allPlanExercises: ExerciseTemplate[] = []
+          const sectionData: typeof planSections = []
+          let hasRun = false
+          let hasRow = false
 
-          // Build exercise list from plan (preserves plan order)
-          const planExercises: ExerciseTemplate[] = plan.exercises.map(pe => {
-            const template = allExerciseTemplates.find(t => t.id === pe.exerciseId)
-            return template || {
-              id: pe.exerciseId,
-              name: pe.name,
-              defaultSets: pe.targetSets,
-              defaultReps: pe.targetReps,
-              defaultDuration: pe.targetDuration,
-              weightUnit: 'lbs' as const,
-              hasBandResistance: pe.hasBandResistance,
+          for (const section of plan.sections) {
+            const sectionExIds: string[] = []
+            for (const pe of section.exercises) {
+              if (pe.coachingNotes) notes[pe.exerciseId] = pe.coachingNotes
+              sectionExIds.push(pe.exerciseId)
+              const template = allExerciseTemplates.find(t => t.id === pe.exerciseId)
+              allPlanExercises.push(template || {
+                id: pe.exerciseId,
+                name: pe.name,
+                defaultSets: pe.targetSets,
+                defaultReps: pe.targetReps,
+                defaultDuration: pe.targetDuration,
+                weightUnit: 'lbs' as const,
+                hasBandResistance: pe.hasBandResistance,
+              })
             }
-          })
+            sectionData.push({ name: section.name, type: section.type, exerciseIds: sectionExIds, notes: section.notes })
+            if (section.type === 'run') hasRun = true
+            if (section.type === 'row') hasRow = true
+          }
+
+          setCoachingNotes(notes)
+          setPlanSections(sectionData)
+          if (plan.generalNotes) setPlanGeneralNotes(plan.generalNotes)
+          setIncludeRun(hasRun)
+          setIncludeRow(hasRow)
+
+          const planExercises = allPlanExercises
 
           // Check for existing sets (already saved from plan start)
           const existingSets = await getExerciseSetsForWorkout(workoutId)
@@ -467,8 +478,61 @@ export function WorkoutActivePage() {
         </div>
       )}
 
-      {/* Custom workout: log phase — exercises */}
-      {isCustom && !buildPhase && customExercises.map((ex) => {
+      {/* Custom workout: log phase with sections */}
+      {isCustom && !buildPhase && hasPlanSections && planSections.map((section, sIdx) => (
+        <div key={sIdx} className="space-y-3">
+          {/* Section header */}
+          <div className="flex items-center gap-2 pt-3">
+            <div className="h-px flex-1 bg-border" />
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide px-2">
+              {section.name || section.type}
+            </h2>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {/* Section notes */}
+          {section.notes && (
+            <div className="bg-secondary rounded-lg px-3 py-2 text-sm text-muted-foreground italic">
+              {section.notes}
+            </div>
+          )}
+
+          {/* Exercise cards in this section */}
+          {section.type === 'exercises' && section.exerciseIds.map(exId => {
+            const ex = customExercises.find(e => e.id === exId)
+            if (!ex) return null
+            const coaching = coachingNotes[ex.id]
+            const exerciseWithNotes = coaching
+              ? { ...ex, notes: coaching + (ex.notes ? ` | ${ex.notes}` : '') }
+              : ex
+            return (
+              <ExerciseCard
+                key={ex.id}
+                exercise={exerciseWithNotes}
+                sets={exerciseSets[ex.id] || []}
+                lastSessionSets={lastSessionData[ex.id]}
+                onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
+                onAddSet={() => handleAddSet(ex.id)}
+                onRemoveSet={() => handleRemoveSet(ex.id)}
+                isPrehab={ex.hasBandResistance}
+              />
+            )
+          })}
+
+          {/* Run form in this section */}
+          {section.type === 'run' && (
+            <RunForm workoutId={workoutId} onFinish={handleFinish} embedded />
+          )}
+
+          {/* Row form in this section */}
+          {section.type === 'row' && (
+            <RowForm workoutId={workoutId} onFinish={handleFinish} />
+          )}
+        </div>
+      ))}
+
+      {/* Custom workout without plan sections: flat list */}
+      {isCustom && !buildPhase && !hasPlanSections && customExercises.map((ex) => {
         const coaching = coachingNotes[ex.id]
         const exerciseWithNotes = coaching
           ? { ...ex, notes: coaching + (ex.notes ? ` | ${ex.notes}` : '') }
@@ -487,28 +551,16 @@ export function WorkoutActivePage() {
         )
       })}
 
-      {/* Custom workout: log phase — run */}
-      {isCustom && !buildPhase && includeRun && (
+      {/* Non-plan custom workout: run/row at the end */}
+      {isCustom && !buildPhase && !hasPlanSections && includeRun && (
         <>
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide pt-2">Run</h2>
-          {planRunNotes && (
-            <div className="bg-secondary rounded-lg px-3 py-2 text-sm text-muted-foreground italic">
-              {planRunNotes}
-            </div>
-          )}
           <RunForm workoutId={workoutId} onFinish={handleFinish} embedded />
         </>
       )}
-
-      {/* Custom workout: log phase — row */}
-      {isCustom && !buildPhase && includeRow && (
+      {isCustom && !buildPhase && !hasPlanSections && includeRow && (
         <>
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide pt-2">Row</h2>
-          {planRowNotes && (
-            <div className="bg-secondary rounded-lg px-3 py-2 text-sm text-muted-foreground italic">
-              {planRowNotes}
-            </div>
-          )}
           <RowForm workoutId={workoutId} onFinish={handleFinish} />
         </>
       )}

@@ -20,7 +20,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-dvh flex flex-col bg-background">
+    <div className="min-h-dvh flex flex-col bg-background safe-area-pt">
       <main className="flex-1 overflow-y-auto pb-20">
         {children}
       </main>

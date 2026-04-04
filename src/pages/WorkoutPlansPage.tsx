@@ -14,7 +14,6 @@ export function WorkoutPlansPage() {
 
   async function handleStartPlan(plan: WorkoutPlan) {
     const now = new Date()
-    // Create a custom workout from the plan
     const workoutId = await db.workouts.add({
       date: format(now, 'yyyy-MM-dd'),
       type: 'custom',
@@ -23,19 +22,21 @@ export function WorkoutPlansPage() {
       planId: plan.id,
     })
 
-    // Pre-populate exercise sets from the plan
-    for (const ex of plan.exercises) {
-      for (let s = 0; s < ex.targetSets; s++) {
-        await db.exerciseSets.add({
-          workoutId: workoutId as number,
-          exerciseId: ex.exerciseId,
-          setNumber: s + 1,
-          weight: ex.targetWeight,
-          weightUnit: 'lbs',
-          reps: ex.targetReps,
-          duration: ex.targetDuration,
-          completed: false,
-        })
+    // Pre-populate exercise sets from all sections
+    for (const section of plan.sections) {
+      for (const ex of section.exercises) {
+        for (let s = 0; s < ex.targetSets; s++) {
+          await db.exerciseSets.add({
+            workoutId: workoutId as number,
+            exerciseId: ex.exerciseId,
+            setNumber: s + 1,
+            weight: ex.targetWeight,
+            weightUnit: 'lbs',
+            reps: ex.targetReps,
+            duration: ex.targetDuration,
+            completed: false,
+          })
+        }
       }
     }
 
@@ -71,73 +72,61 @@ export function WorkoutPlansPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {plans.map(plan => (
-            <Card key={plan.id}>
-              <CardContent className="py-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-medium text-sm">{plan.name}</h3>
-                    <div className="flex flex-wrap items-center gap-1 mt-1">
-                      <Badge variant="secondary" className="text-xs">
-                        <Dumbbell className="w-3 h-3 mr-1" />
-                        {plan.exercises.length} exercises
-                      </Badge>
-                      {plan.includeRun && (
+          {plans.map(plan => {
+            const totalExercises = plan.sections.reduce((sum, s) => sum + s.exercises.length, 0)
+            const hasRun = plan.sections.some(s => s.type === 'run')
+            const hasRow = plan.sections.some(s => s.type === 'row')
+            return (
+              <Card key={plan.id}>
+                <CardContent className="py-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-sm">{plan.name}</h3>
+                      <div className="flex flex-wrap items-center gap-1 mt-1">
                         <Badge variant="secondary" className="text-xs">
-                          <Footprints className="w-3 h-3 mr-1" />
-                          Run
+                          {plan.sections.length} sections
                         </Badge>
-                      )}
-                      {plan.includeRow && (
                         <Badge variant="secondary" className="text-xs">
-                          <Waves className="w-3 h-3 mr-1" />
-                          Row
+                          <Dumbbell className="w-3 h-3 mr-1" />
+                          {totalExercises} exercises
                         </Badge>
-                      )}
+                        {hasRun && (
+                          <Badge variant="secondary" className="text-xs">
+                            <Footprints className="w-3 h-3 mr-1" />Run
+                          </Badge>
+                        )}
+                        {hasRow && (
+                          <Badge variant="secondary" className="text-xs">
+                            <Waves className="w-3 h-3 mr-1" />Row
+                          </Badge>
+                        )}
+                      </div>
+                      {/* Section preview */}
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {plan.sections.map(s => s.name || s.type).join(' → ')}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Created {format(new Date(plan.createdAt), 'MMM d, yyyy')}
+                      </p>
                     </div>
-                    {plan.generalNotes && (
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{plan.generalNotes}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Created {format(new Date(plan.createdAt), 'MMM d, yyyy')}
-                    </p>
+                    <div className="flex items-center gap-1 ml-2">
+                      <Button size="sm" onClick={() => handleStartPlan(plan)} className="bg-emerald-600 hover:bg-emerald-700">
+                        <Play className="w-4 h-4 mr-1" />Start
+                      </Button>
+                      <button type="button" onClick={() => navigate(`/plans/edit/${plan.id}`)}
+                        className="p-2 text-muted-foreground hover:text-foreground">
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => handleDelete(plan.id!)}
+                        className="p-2 text-muted-foreground hover:text-red-500">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-
-                  <div className="flex items-center gap-1 ml-2">
-                    <Button size="sm" onClick={() => handleStartPlan(plan)} className="bg-emerald-600 hover:bg-emerald-700">
-                      <Play className="w-4 h-4 mr-1" />
-                      Start
-                    </Button>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/plans/edit/${plan.id}`)}
-                      className="p-2 text-muted-foreground hover:text-foreground"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(plan.id!)}
-                      className="p-2 text-muted-foreground hover:text-red-500"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Exercise preview */}
-                <div className="mt-2 text-xs text-muted-foreground">
-                  {plan.exercises.slice(0, 4).map((ex, i) => (
-                    <span key={i}>
-                      {ex.name} ({ex.targetSets}x{ex.targetReps || `${ex.targetDuration}s`})
-                      {i < Math.min(3, plan.exercises.length - 1) ? ' · ' : ''}
-                    </span>
-                  ))}
-                  {plan.exercises.length > 4 && ` +${plan.exercises.length - 4} more`}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            )
+          })}
         </div>
       )}
     </div>

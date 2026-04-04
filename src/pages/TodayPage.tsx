@@ -128,7 +128,7 @@ export function TodayPage() {
                     <div>
                       <span className="font-medium text-sm">{plan.name}</span>
                       <div className="text-xs text-muted-foreground">
-                        {plan.exercises.length} exercises{plan.includeRun ? ' + Run' : ''}{plan.includeRow ? ' + Row' : ''}
+                        {plan.sections.length} sections &middot; {plan.sections.reduce((s, sec) => s + sec.exercises.length, 0)} exercises
                       </div>
                     </div>
                   </div>
@@ -145,18 +145,20 @@ export function TodayPage() {
                         notes: `Plan: ${plan.name}`,
                         planId: plan.id,
                       })
-                      for (const ex of plan.exercises) {
-                        for (let s = 0; s < ex.targetSets; s++) {
-                          await db.exerciseSets.add({
-                            workoutId: workoutId as number,
-                            exerciseId: ex.exerciseId,
-                            setNumber: s + 1,
-                            weight: ex.targetWeight,
-                            weightUnit: 'lbs',
-                            reps: ex.targetReps,
-                            duration: ex.targetDuration,
-                            completed: false,
-                          })
+                      for (const section of plan.sections) {
+                        for (const ex of section.exercises) {
+                          for (let s = 0; s < ex.targetSets; s++) {
+                            await db.exerciseSets.add({
+                              workoutId: workoutId as number,
+                              exerciseId: ex.exerciseId,
+                              setNumber: s + 1,
+                              weight: ex.targetWeight,
+                              weightUnit: 'lbs',
+                              reps: ex.targetReps,
+                              duration: ex.targetDuration,
+                              completed: false,
+                            })
+                          }
                         }
                       }
                       navigate(`/workout/${workoutId}`)
