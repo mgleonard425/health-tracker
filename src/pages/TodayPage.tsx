@@ -179,10 +179,10 @@ export function TodayPage() {
         </div>
       )}
 
-      {/* Create Plan shortcut */}
-      <Button variant="outline" className="w-full" onClick={() => navigate('/plans/new')}>
+      {/* Workout Plans shortcut */}
+      <Button variant="outline" className="w-full" onClick={() => navigate('/plans')}>
         <FileText className="w-4 h-4 mr-2" />
-        Create Workout Plan
+        Workout Plans
       </Button>
 
       {/* Daily Check-In */}
