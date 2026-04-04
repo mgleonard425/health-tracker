@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus, ChevronDown, ChevronUp } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import {
   strengthAExercises,
@@ -9,9 +10,12 @@ import {
   type ExerciseTemplate,
 } from '@/data/workout-templates'
 
+type CustomExerciseType = 'weight-reps' | 'reps-only' | 'duration' | 'band-reps'
+
 interface ExercisePickerProps {
   selectedIds: Set<string>
   onToggle: (exercise: ExerciseTemplate) => void
+  onAddCustomExercise: (exercise: ExerciseTemplate) => void
   includeRun: boolean
   onToggleRun: () => void
   includeRow: boolean
@@ -24,8 +28,38 @@ const groups = [
   { label: 'IT Band Prehab', exercises: prehabExercises, color: 'bg-emerald-600' },
 ]
 
-export function ExercisePicker({ selectedIds, onToggle, includeRun, onToggleRun, includeRow, onToggleRow }: ExercisePickerProps) {
+const customTypes: { value: CustomExerciseType; label: string }[] = [
+  { value: 'weight-reps', label: 'Weight + Reps' },
+  { value: 'reps-only', label: 'Reps Only' },
+  { value: 'duration', label: 'Duration' },
+  { value: 'band-reps', label: 'Band + Reps' },
+]
+
+export function ExercisePicker({ selectedIds, onToggle, onAddCustomExercise, includeRun, onToggleRun, includeRow, onToggleRow }: ExercisePickerProps) {
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
+  const [showCustomForm, setShowCustomForm] = useState(false)
+  const [customName, setCustomName] = useState('')
+  const [customType, setCustomType] = useState<CustomExerciseType>('reps-only')
+  const [customSets, setCustomSets] = useState(3)
+
+  function handleAddCustom() {
+    if (!customName.trim()) return
+
+    const id = `custom-${customName.trim().toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`
+    const exercise: ExerciseTemplate = {
+      id,
+      name: customName.trim(),
+      defaultSets: customSets,
+      defaultReps: customType !== 'duration' ? 10 : undefined,
+      defaultDuration: customType === 'duration' ? 30 : undefined,
+      weightUnit: 'lbs',
+      hasBandResistance: customType === 'band-reps',
+    }
+
+    onAddCustomExercise(exercise)
+    setCustomName('')
+    setShowCustomForm(false)
+  }
 
   return (
     <div className="space-y-2">
@@ -84,6 +118,73 @@ export function ExercisePicker({ selectedIds, onToggle, includeRun, onToggleRun,
           </div>
         )
       })}
+
+      {/* Custom exercise */}
+      <div className="bg-secondary rounded-lg px-3 py-3 space-y-2">
+        <button
+          type="button"
+          className="flex items-center gap-2 text-sm font-medium w-full text-left"
+          onClick={() => setShowCustomForm(!showCustomForm)}
+        >
+          <Plus className="w-4 h-4" />
+          Add Custom Exercise
+        </button>
+
+        {showCustomForm && (
+          <div className="space-y-2 pt-1">
+            <Input
+              value={customName}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomName(e.target.value)}
+              placeholder="Exercise name (e.g., Band pull-aparts)"
+              onKeyDown={(e: React.KeyboardEvent) => e.key === 'Enter' && handleAddCustom()}
+            />
+            <div className="flex flex-wrap gap-1">
+              {customTypes.map(t => (
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => setCustomType(t.value)}
+                  className={cn(
+                    'px-2 py-1 rounded text-xs font-medium transition-colors touch-manipulation',
+                    customType === t.value ? 'bg-primary text-primary-foreground' : 'bg-background/50 text-muted-foreground'
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Sets:</span>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4].map(n => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setCustomSets(n)}
+                    className={cn(
+                      'w-8 h-8 rounded text-xs font-bold transition-colors touch-manipulation',
+                      customSets === n ? 'bg-primary text-primary-foreground' : 'bg-background/50 text-muted-foreground'
+                    )}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={handleAddCustom}
+                disabled={!customName.trim()}
+                className={cn(
+                  'ml-auto px-3 py-1.5 rounded text-xs font-medium transition-colors touch-manipulation',
+                  customName.trim() ? 'bg-primary text-primary-foreground' : 'bg-background/50 text-muted-foreground opacity-50'
+                )}
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Cardio options */}
       <div className="bg-secondary rounded-lg px-3 py-3 space-y-2">

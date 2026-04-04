@@ -198,6 +198,12 @@ export function WorkoutActivePage() {
     })
   }
 
+  // Custom workout: add a freeform exercise
+  function handleAddCustomExercise(exercise: ExerciseTemplate) {
+    setCustomSelectedIds(prev => new Set([...prev, exercise.id]))
+    setCustomExercises(exs => [...exs, exercise])
+  }
+
   // Custom workout: transition from build to log phase
   async function handleStartCustom() {
     // Initialize sets for selected exercises, loading last-session data
@@ -263,6 +269,26 @@ export function WorkoutActivePage() {
       const sets = [...(prev[exerciseId] || [])]
       sets[setIndex] = { ...sets[setIndex], ...data }
       return { ...prev, [exerciseId]: sets }
+    })
+  }, [])
+
+  const handleAddSet = useCallback((exerciseId: string) => {
+    setExerciseSets(prev => {
+      const sets = prev[exerciseId] || []
+      // Clone the last set's values (minus notes and completed) as a starting point
+      const lastSet = sets[sets.length - 1]
+      const newSet: SetData = lastSet
+        ? { ...lastSet, completed: false, notes: undefined }
+        : { completed: false }
+      return { ...prev, [exerciseId]: [...sets, newSet] }
+    })
+  }, [])
+
+  const handleRemoveSet = useCallback((exerciseId: string) => {
+    setExerciseSets(prev => {
+      const sets = prev[exerciseId] || []
+      if (sets.length <= 1) return prev
+      return { ...prev, [exerciseId]: sets.slice(0, -1) }
     })
   }, [])
 
@@ -356,6 +382,7 @@ export function WorkoutActivePage() {
           <ExercisePicker
             selectedIds={customSelectedIds}
             onToggle={handleToggleExercise}
+            onAddCustomExercise={handleAddCustomExercise}
             includeRun={includeRun}
             onToggleRun={() => setIncludeRun(r => !r)}
             includeRow={includeRow}
@@ -377,6 +404,8 @@ export function WorkoutActivePage() {
           sets={exerciseSets[ex.id] || []}
           lastSessionSets={lastSessionData[ex.id]}
           onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
+          onAddSet={() => handleAddSet(ex.id)}
+          onRemoveSet={() => handleRemoveSet(ex.id)}
           isPrehab={ex.hasBandResistance}
         />
       ))}
@@ -385,7 +414,7 @@ export function WorkoutActivePage() {
       {isCustom && !buildPhase && includeRun && (
         <>
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide pt-2">Run</h2>
-          <RunForm workoutId={workoutId} onFinish={handleFinish} />
+          <RunForm workoutId={workoutId} onFinish={handleFinish} embedded />
         </>
       )}
 
@@ -405,6 +434,8 @@ export function WorkoutActivePage() {
           sets={exerciseSets[ex.id] || []}
           lastSessionSets={lastSessionData[ex.id]}
           onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
+          onAddSet={() => handleAddSet(ex.id)}
+          onRemoveSet={() => handleRemoveSet(ex.id)}
           isPrehab={isPrehab}
         />
       ))}

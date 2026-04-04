@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, MessageSquare } from 'lucide-react'
+import { ChevronDown, ChevronUp, MessageSquare, Plus, Minus } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Stepper } from './Stepper'
@@ -21,6 +21,8 @@ interface ExerciseCardProps {
   sets: SetData[]
   lastSessionSets?: ExerciseSet[]
   onUpdateSet: (setIndex: number, data: Partial<SetData>) => void
+  onAddSet?: () => void
+  onRemoveSet?: () => void
   isPrehab?: boolean
 }
 
@@ -30,7 +32,7 @@ const bandColors: Record<BandResistance, string> = {
   heavy: 'bg-red-600',
 }
 
-export function ExerciseCard({ exercise, sets, lastSessionSets, onUpdateSet, isPrehab }: ExerciseCardProps) {
+export function ExerciseCard({ exercise, sets, lastSessionSets, onUpdateSet, onAddSet, onRemoveSet, isPrehab }: ExerciseCardProps) {
   const [expanded, setExpanded] = useState(true)
   const [showNotes, setShowNotes] = useState<number | null>(null)
 
@@ -61,6 +63,7 @@ export function ExerciseCard({ exercise, sets, lastSessionSets, onUpdateSet, isP
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="text-xs">{sets.length} sets</Badge>
           {exercise.isOptional && <Badge variant="secondary" className="text-xs">Optional</Badge>}
           {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </div>
@@ -192,6 +195,32 @@ export function ExerciseCard({ exercise, sets, lastSessionSets, onUpdateSet, isP
               )}
             </div>
           ))}
+
+          {/* Add/remove set buttons */}
+          {(onAddSet || onRemoveSet) && (
+            <div className="flex justify-center gap-2 pt-1">
+              {onRemoveSet && sets.length > 1 && (
+                <button
+                  type="button"
+                  onClick={onRemoveSet}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary text-muted-foreground transition-colors touch-manipulation"
+                >
+                  <Minus className="w-3 h-3" />
+                  Remove Set
+                </button>
+              )}
+              {onAddSet && (
+                <button
+                  type="button"
+                  onClick={onAddSet}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary text-muted-foreground transition-colors touch-manipulation"
+                >
+                  <Plus className="w-3 h-3" />
+                  Add Set
+                </button>
+              )}
+            </div>
+          )}
         </CardContent>
       )}
     </Card>

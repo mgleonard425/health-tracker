@@ -29,11 +29,11 @@ export function DashboardPage() {
 
   const runDetails = useLiveQuery(async () => {
     if (!workouts) return []
-    const runWorkouts = workouts.filter(w => w.type === 'run')
-    const details = await Promise.all(
-      runWorkouts.map(w => db.runDetails.where('workoutId').equals(w.id!).first())
+    // Check all workouts for run details (run type + custom workouts can both have runs)
+    const allDetails = await Promise.all(
+      workouts.map(w => db.runDetails.where('workoutId').equals(w.id!).toArray())
     )
-    return details.filter(Boolean)
+    return allDetails.flat()
   }, [workouts])
 
   const meals = useLiveQuery(
@@ -49,11 +49,11 @@ export function DashboardPage() {
   const prehabCount = workouts.filter(w => w.type === 'prehab').length
   const mobilityCount = workouts.filter(w => w.type === 'yoga-mobility').length
   const rowCount = workouts.filter(w => w.type === 'row').length
-  const runCount = workouts.filter(w => w.type === 'run').length
+  const runCount = workouts.filter(w => w.type === 'run' || w.type === 'custom').length
 
-  const totalMiles = runDetails?.reduce((sum, r) => sum + (r?.distanceMiles || 0), 0) || 0
+  const totalMiles = runDetails?.reduce((sum, r) => sum + (r.distanceMiles || 0), 0) || 0
   const longRunMiles = runDetails?.length
-    ? Math.max(...runDetails.map(r => r?.distanceMiles || 0))
+    ? Math.max(...runDetails.map(r => r.distanceMiles || 0))
     : 0
 
   const avgSleep = checkIns.length > 0
