@@ -5,11 +5,13 @@ import { ArrowLeft, Check, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ExerciseCard } from '@/components/workout/ExerciseCard'
+import { ExercisePicker } from '@/components/workout/ExercisePicker'
 import { RunForm } from '@/components/workout/RunForm'
 import { RowForm } from '@/components/workout/RowForm'
 import { YogaMobilityForm } from '@/components/workout/YogaMobilityForm'
 import { db, getLastWorkoutOfType, getExerciseSetsForWorkout } from '@/db'
-import { getExercisesForWorkoutType } from '@/data/workout-templates'
+import { getExercisesForWorkoutType, strengthAExercises, strengthBExercises, prehabExercises } from '@/data/workout-templates'
+import type { ExerciseTemplate } from '@/data/workout-templates'
 import type { ExerciseSet, BandResistance } from '@/db'
 
 interface SetData {
@@ -30,7 +32,10 @@ const workoutLabels: Record<string, string> = {
   'run': 'Run',
   'row': 'Row',
   'yoga-mobility': 'Yoga / Mobility',
+  'custom': 'Custom Workout',
 }
+
+const allExerciseTemplates = [...strengthAExercises, ...strengthBExercises, ...prehabExercises]
 
 export function WorkoutActivePage() {
   const { id } = useParams<{ id: string }>()
@@ -43,10 +48,18 @@ export function WorkoutActivePage() {
   const [initialized, setInitialized] = useState(false)
   const [elapsed, setElapsed] = useState(0)
 
-  const exercises = workout ? getExercisesForWorkoutType(workout.type) : []
+  // Custom workout state
+  const [customExercises, setCustomExercises] = useState<ExerciseTemplate[]>([])
+  const [customSelectedIds, setCustomSelectedIds] = useState<Set<string>>(new Set())
+  const [includeRun, setIncludeRun] = useState(false)
+  const [includeRow, setIncludeRow] = useState(false)
+  const [buildPhase, setBuildPhase] = useState(true) // true = picking exercises, false = logging
+
+  const isCustom = workout?.type === 'custom'
+  const exercises = isCustom ? customExercises : (workout ? getExercisesForWorkoutType(workout.type) : [])
   const isPrehab = workout?.type === 'prehab'
   const isStrength = workout?.type === 'strength-a' || workout?.type === 'strength-b'
-  const isExerciseBased = isStrength || isPrehab
+  const isExerciseBased = isStrength || isPrehab || (isCustom && !buildPhase)
 
   // Timer
   useEffect(() => {
@@ -58,13 +71,13 @@ export function WorkoutActivePage() {
     return () => clearInterval(interval)
   }, [workout?.startedAt, workout?.completedAt])
 
-  // Initialize sets from template + last session data
+  // Initialize sets from template + last session data (non-custom workouts)
   useEffect(() => {
-    if (!workout || initialized || exercises.length === 0) return
+    if (!workout || initialized || isCustom) return
+    if (exercises.length === 0) return
     const workoutType = workout.type
 
     async function init() {
-      // Check if there are already saved sets for this workout
       const existingSets = await getExerciseSetsForWorkout(workoutId)
       if (existingSets.length > 0) {
         const map: ExerciseSetsMap = {}
@@ -87,7 +100,6 @@ export function WorkoutActivePage() {
         return
       }
 
-      // Load last session data
       const lastWorkout = await getLastWorkoutOfType(workoutType)
       const lastSets: Record<string, ExerciseSet[]> = {}
 
@@ -99,7 +111,6 @@ export function WorkoutActivePage() {
       }
       setLastSessionData(lastSets)
 
-      // Initialize from last session or defaults
       const map: ExerciseSetsMap = {}
       for (const ex of exercises) {
         const last = lastSets[ex.id]
@@ -121,7 +132,47 @@ export function WorkoutActivePage() {
     }
 
     init()
-  }, [workout, workoutId, initialized, exercises])
+  }, [workout, workoutId, initialized, exercises, isCustom])
+
+  // Initialize custom workout from saved sets (re-opening a completed custom workout)
+  useEffect(() => {
+    if (!workout || !isCustom || initialized) return
+
+    async function initCustom() {
+      const existingSets = await getExerciseSetsForWorkout(workoutId)
+      if (existingSets.length > 0) {
+        // Rebuild the exercise list from saved data
+        const savedIds = new Set(existingSets.map(s => s.exerciseId))
+        const selectedExercises = allExerciseTemplates.filter(e => savedIds.has(e.id))
+        setCustomExercises(selectedExercises)
+        setCustomSelectedIds(savedIds)
+
+        const map: ExerciseSetsMap = {}
+        for (const ex of selectedExercises) {
+          const saved = existingSets.filter(s => s.exerciseId === ex.id)
+          map[ex.id] = saved.map(s => ({
+            weight: s.weight,
+            reps: s.reps,
+            duration: s.duration,
+            bandResistance: s.bandResistance,
+            completed: s.completed,
+            notes: s.notes,
+          }))
+        }
+        setExerciseSets(map)
+        setBuildPhase(false)
+
+        // Check if run/row were included
+        const hasRun = await db.runDetails.where('workoutId').equals(workoutId).count()
+        const hasRow = await db.rowDetails.where('workoutId').equals(workoutId).count()
+        setIncludeRun(hasRun > 0)
+        setIncludeRow(hasRow > 0)
+      }
+      setInitialized(true)
+    }
+
+    initCustom()
+  }, [workout, workoutId, isCustom, initialized])
 
   function createDefaultSets(ex: { defaultSets: number; defaultWeight?: number; defaultReps?: number; defaultDuration?: number }) {
     return Array.from({ length: ex.defaultSets }, () => ({
@@ -130,6 +181,81 @@ export function WorkoutActivePage() {
       duration: ex.defaultDuration,
       completed: false,
     }))
+  }
+
+  // Custom workout: toggle exercise
+  function handleToggleExercise(exercise: ExerciseTemplate) {
+    setCustomSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(exercise.id)) {
+        next.delete(exercise.id)
+        setCustomExercises(exs => exs.filter(e => e.id !== exercise.id))
+      } else {
+        next.add(exercise.id)
+        setCustomExercises(exs => [...exs, exercise])
+      }
+      return next
+    })
+  }
+
+  // Custom workout: transition from build to log phase
+  async function handleStartCustom() {
+    // Initialize sets for selected exercises, loading last-session data
+    const map: ExerciseSetsMap = {}
+    const lastSets: Record<string, ExerciseSet[]> = {}
+
+    // Try to find last session data from the last custom workout
+    const lastCustom = await getLastWorkoutOfType('custom')
+    if (lastCustom?.id && lastCustom.id !== workoutId) {
+      const allLastSets = await getExerciseSetsForWorkout(lastCustom.id)
+      for (const ex of customExercises) {
+        lastSets[ex.id] = allLastSets.filter(s => s.exerciseId === ex.id)
+      }
+    }
+
+    // Also check the template-specific workouts for last session data
+    for (const ex of customExercises) {
+      if (lastSets[ex.id]?.length) continue
+      // Find which template this exercise belongs to and check that workout type
+      for (const [type, templates] of [
+        ['strength-a', strengthAExercises],
+        ['strength-b', strengthBExercises],
+        ['prehab', prehabExercises],
+      ] as const) {
+        if (templates.some(t => t.id === ex.id)) {
+          const lastTyped = await getLastWorkoutOfType(type)
+          if (lastTyped?.id) {
+            const sets = await getExerciseSetsForWorkout(lastTyped.id)
+            const matching = sets.filter(s => s.exerciseId === ex.id)
+            if (matching.length > 0) {
+              lastSets[ex.id] = matching
+            }
+          }
+          break
+        }
+      }
+    }
+
+    setLastSessionData(lastSets)
+
+    for (const ex of customExercises) {
+      const last = lastSets[ex.id]
+      if (last && last.length > 0) {
+        map[ex.id] = last.map(s => ({
+          weight: s.weight,
+          reps: s.reps,
+          duration: s.duration,
+          bandResistance: s.bandResistance,
+          completed: false,
+          notes: undefined,
+        }))
+      } else {
+        map[ex.id] = createDefaultSets(ex)
+      }
+    }
+
+    setExerciseSets(map)
+    setBuildPhase(false)
   }
 
   const handleUpdateSet = useCallback((exerciseId: string, setIndex: number, data: Partial<SetData>) => {
@@ -144,8 +270,9 @@ export function WorkoutActivePage() {
     if (!workout) return
 
     // Save all exercise sets
+    const exerciseList = isCustom ? customExercises : exercises
     const setsToSave: Omit<ExerciseSet, 'id'>[] = []
-    for (const ex of exercises) {
+    for (const ex of exerciseList) {
       const sets = exerciseSets[ex.id] || []
       sets.forEach((set, i) => {
         setsToSave.push({
@@ -163,9 +290,10 @@ export function WorkoutActivePage() {
       })
     }
 
-    // Delete existing sets and add new ones
     await db.exerciseSets.where('workoutId').equals(workoutId).delete()
-    await db.exerciseSets.bulkAdd(setsToSave)
+    if (setsToSave.length > 0) {
+      await db.exerciseSets.bulkAdd(setsToSave)
+    }
     await db.workouts.update(workoutId, { completedAt: new Date().toISOString() })
 
     navigate('/')
@@ -200,15 +328,62 @@ export function WorkoutActivePage() {
         {workout.completedAt ? (
           <Badge variant="secondary">Done</Badge>
         ) : (
-          <Button size="sm" onClick={handleFinish}>
+          <Button size="sm" onClick={handleFinish} disabled={isCustom && buildPhase}>
             <Check className="w-4 h-4 mr-1" />
             Finish
           </Button>
         )}
       </div>
 
-      {/* Exercise-based workouts */}
-      {isExerciseBased && exercises.map((ex) => (
+      {/* Custom workout: build phase */}
+      {isCustom && buildPhase && (
+        <>
+          <ExercisePicker
+            selectedIds={customSelectedIds}
+            onToggle={handleToggleExercise}
+            includeRun={includeRun}
+            onToggleRun={() => setIncludeRun(r => !r)}
+            includeRow={includeRow}
+            onToggleRow={() => setIncludeRow(r => !r)}
+          />
+          {(customSelectedIds.size > 0 || includeRun || includeRow) && (
+            <Button className="w-full h-12 text-base" onClick={handleStartCustom}>
+              Start Workout ({customSelectedIds.size} exercises{includeRun ? ' + Run' : ''}{includeRow ? ' + Row' : ''})
+            </Button>
+          )}
+        </>
+      )}
+
+      {/* Custom workout: log phase — exercises */}
+      {isCustom && !buildPhase && customExercises.map((ex) => (
+        <ExerciseCard
+          key={ex.id}
+          exercise={ex}
+          sets={exerciseSets[ex.id] || []}
+          lastSessionSets={lastSessionData[ex.id]}
+          onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
+          isPrehab={ex.hasBandResistance}
+        />
+      ))}
+
+      {/* Custom workout: log phase — run */}
+      {isCustom && !buildPhase && includeRun && (
+        <>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide pt-2">Run</h2>
+          <RunForm workoutId={workoutId} onFinish={handleFinish} />
+        </>
+      )}
+
+      {/* Custom workout: log phase — row */}
+      {isCustom && !buildPhase && includeRow && (
+        <>
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide pt-2">Row</h2>
+          <RowForm workoutId={workoutId} onFinish={handleFinish} />
+        </>
+      )}
+
+      {/* Exercise-based template workouts (non-custom) */}
+      {!isCustom && isExerciseBased && exercises.map((ex) => (
         <ExerciseCard
           key={ex.id}
           exercise={ex}
@@ -219,23 +394,21 @@ export function WorkoutActivePage() {
         />
       ))}
 
-      {/* Run form */}
+      {/* Non-custom single-type forms */}
       {workout.type === 'run' && (
         <RunForm workoutId={workoutId} onFinish={handleFinish} />
       )}
 
-      {/* Row form */}
       {workout.type === 'row' && (
         <RowForm workoutId={workoutId} onFinish={handleFinish} />
       )}
 
-      {/* Yoga/Mobility form */}
       {workout.type === 'yoga-mobility' && (
         <YogaMobilityForm workoutId={workoutId} onFinish={handleFinish} />
       )}
 
-      {/* Finish button at bottom for exercise workouts */}
-      {isExerciseBased && !workout.completedAt && (
+      {/* Finish button at bottom */}
+      {((isExerciseBased && !isCustom) || (isCustom && !buildPhase)) && !workout.completedAt && (
         <Button className="w-full h-12 text-base" onClick={handleFinish}>
           <Check className="w-5 h-5 mr-2" />
           Finish Workout

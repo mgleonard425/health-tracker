@@ -2,7 +2,7 @@ import Dexie, { type Table } from 'dexie'
 
 // --- Core Types ---
 
-export type WorkoutType = 'strength-a' | 'strength-b' | 'prehab' | 'run' | 'row' | 'yoga-mobility'
+export type WorkoutType = 'strength-a' | 'strength-b' | 'prehab' | 'run' | 'row' | 'yoga-mobility' | 'custom'
 export type RunType = 'easy' | 'long' | 'tempo' | 'strides' | 'marathon-pace' | 'fartlek'
 export type MobilityType = 'daily' | 'extended-monday' | 'yoga-class'
 export type MobilityLocation = 'home' | 'yogabeach-sf' | 'ocean-beach-yoga' | 'fitlocalfit'

@@ -12,6 +12,7 @@ const typeLabels: Record<string, string> = {
   'run': 'Run',
   'row': 'Row',
   'yoga-mobility': 'Yoga / Mobility',
+  'custom': 'Custom',
 }
 
 const typeColors: Record<string, string> = {
@@ -21,6 +22,7 @@ const typeColors: Record<string, string> = {
   'run': 'bg-orange-600',
   'row': 'bg-cyan-600',
   'yoga-mobility': 'bg-purple-600',
+  'custom': 'bg-zinc-600',
 }
 
 export function HistoryPage() {

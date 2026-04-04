@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { format } from 'date-fns'
-import { Dumbbell, Footprints, Timer, Heart, ClipboardCheck, Waves } from 'lucide-react'
+import { Dumbbell, Footprints, Timer, Heart, ClipboardCheck, Waves, Shuffle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +18,7 @@ const workoutIcons: Record<string, typeof Dumbbell> = {
   'run': Footprints,
   'row': Waves,
   'yoga-mobility': Timer,
+  'custom': Shuffle,
 }
 
 const quickActions: { label: string; type: WorkoutType; color: string }[] = [
@@ -27,6 +28,7 @@ const quickActions: { label: string; type: WorkoutType; color: string }[] = [
   { label: 'Run', type: 'run', color: 'bg-orange-600' },
   { label: 'Row', type: 'row', color: 'bg-cyan-600' },
   { label: 'Yoga / Mobility', type: 'yoga-mobility', color: 'bg-purple-600' },
+  { label: 'Custom', type: 'custom', color: 'bg-zinc-600' },
 ]
 
 export function TodayPage() {
