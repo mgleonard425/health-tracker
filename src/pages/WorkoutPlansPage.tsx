@@ -1,12 +1,13 @@
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { format } from 'date-fns'
-import { ArrowLeft, Plus, Play, Edit, Trash2, Dumbbell, Footprints, Waves, Share2 } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowLeft, Plus, Play, Edit, Trash2, Dumbbell, Footprints, Waves, Share2, ClipboardPaste, CheckCircle } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { db } from '@/db'
-import { generateShareUrl } from '@/lib/plan-sharing'
+import { generateShareUrl, decodePlan } from '@/lib/plan-sharing'
 import type { WorkoutPlan } from '@/db'
 
 export function WorkoutPlansPage() {
@@ -60,6 +61,46 @@ export function WorkoutPlansPage() {
     await db.workoutPlans.delete(id)
   }
 
+  const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle')
+  const [importName, setImportName] = useState('')
+
+  async function handleImportFromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText()
+      if (!text) {
+        setImportStatus('error')
+        return
+      }
+
+      const plan = decodePlan(text.trim())
+      if (!plan) {
+        setImportStatus('error')
+        return
+      }
+
+      const existing = await db.workoutPlans.where('name').equals(plan.name).first()
+      if (existing) {
+        await db.workoutPlans.update(existing.id!, {
+          sections: plan.sections,
+          generalNotes: plan.generalNotes,
+          createdAt: new Date().toISOString(),
+        })
+      } else {
+        await db.workoutPlans.add({
+          ...plan,
+          createdAt: new Date().toISOString(),
+        })
+      }
+
+      setImportName(plan.name)
+      setImportStatus('success')
+      setTimeout(() => setImportStatus('idle'), 3000)
+    } catch {
+      setImportStatus('error')
+      setTimeout(() => setImportStatus('idle'), 3000)
+    }
+  }
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between">
@@ -72,6 +113,21 @@ export function WorkoutPlansPage() {
           New
         </Button>
       </div>
+
+      {/* Import from clipboard */}
+      <Button
+        variant={importStatus === 'success' ? 'secondary' : 'outline'}
+        className="w-full"
+        onClick={handleImportFromClipboard}
+      >
+        {importStatus === 'success' ? (
+          <><CheckCircle className="w-4 h-4 mr-2 text-emerald-500" /> Imported "{importName}"</>
+        ) : importStatus === 'error' ? (
+          <>No valid plan found on clipboard</>
+        ) : (
+          <><ClipboardPaste className="w-4 h-4 mr-2" /> Import from Clipboard</>
+        )}
+      </Button>
 
       {!plans || plans.length === 0 ? (
         <div className="text-center text-muted-foreground py-12 space-y-3">
