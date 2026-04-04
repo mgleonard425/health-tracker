@@ -11,6 +11,7 @@ import { SettingsPage } from '@/pages/SettingsPage'
 import { WorkoutPlansPage } from '@/pages/WorkoutPlansPage'
 import { PlanWorkoutPage } from '@/pages/PlanWorkoutPage'
 import { ImportPlanPage } from '@/pages/ImportPlanPage'
+import { ImportWatchPage } from '@/pages/ImportWatchPage'
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/plans/new" element={<PlanWorkoutPage />} />
         <Route path="/plans/edit/:id" element={<PlanWorkoutPage />} />
         <Route path="/import" element={<ImportPlanPage />} />
+        <Route path="/import-watch" element={<ImportWatchPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ArrowLeft, Check, Clock, Trash2 } from 'lucide-react'
+import { ArrowLeft, Check, Clock, Trash2, Watch } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 import { ExerciseCard } from '@/components/workout/ExerciseCard'
 import { ExercisePicker } from '@/components/workout/ExercisePicker'
 import { RunForm } from '@/components/workout/RunForm'
@@ -60,6 +61,12 @@ export function WorkoutActivePage() {
   const [planGeneralNotes, setPlanGeneralNotes] = useState<string>('')
   const [planSections, setPlanSections] = useState<{ name: string; type: string; exerciseIds: string[]; notes?: string }[]>([])
   const hasPlanSections = planSections.length > 0
+
+  // Watch metrics for this workout
+  const watchMetrics = useLiveQuery(
+    () => workout?.id ? db.watchMetrics.where('workoutId').equals(workout.id).toArray() : [],
+    [workout?.id]
+  )
 
   const isCustom = workout?.type === 'custom'
   const exercises = isCustom ? customExercises : (workout ? getExercisesForWorkoutType(workout.type) : [])
@@ -450,6 +457,52 @@ export function WorkoutActivePage() {
           </Button>
         )}
       </div>
+
+      {/* Watch metrics (if linked) */}
+      {watchMetrics && watchMetrics.length > 0 && (
+        <Card>
+          <CardContent className="py-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Watch className="w-4 h-4 text-muted-foreground" />
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Apple Watch</span>
+            </div>
+            {watchMetrics.map(m => (
+              <div key={m.id} className="grid grid-cols-3 gap-2 text-center text-sm">
+                {m.avgHeartRate && (
+                  <div>
+                    <div className="font-bold text-red-400">{m.avgHeartRate}</div>
+                    <div className="text-xs text-muted-foreground">Avg HR</div>
+                  </div>
+                )}
+                {m.maxHeartRate && (
+                  <div>
+                    <div className="font-bold text-red-500">{m.maxHeartRate}</div>
+                    <div className="text-xs text-muted-foreground">Max HR</div>
+                  </div>
+                )}
+                {m.activeCalories && (
+                  <div>
+                    <div className="font-bold text-orange-400">{m.activeCalories}</div>
+                    <div className="text-xs text-muted-foreground">Active Cal</div>
+                  </div>
+                )}
+                {m.durationMinutes > 0 && (
+                  <div>
+                    <div className="font-bold">{m.durationMinutes}</div>
+                    <div className="text-xs text-muted-foreground">Min</div>
+                  </div>
+                )}
+                {m.distanceMeters && (
+                  <div>
+                    <div className="font-bold">{(m.distanceMeters / 1609.34).toFixed(2)}</div>
+                    <div className="text-xs text-muted-foreground">Miles</div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Custom workout: build phase */}
       {isCustom && buildPhase && (

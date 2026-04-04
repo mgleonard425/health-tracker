@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Download, Key, Trash2 } from 'lucide-react'
+import { ArrowLeft, Download, Key, Trash2, Watch } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -97,6 +97,47 @@ export function SettingsPage() {
             <Button size="sm" onClick={handleSaveApiKey}>
               {saved ? '✓ Saved' : 'Save'}
             </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Apple Watch */}
+      <Card>
+        <CardContent className="pt-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Watch className="w-4 h-4 text-muted-foreground" />
+            <h2 className="font-medium text-sm">Apple Watch Integration</h2>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Use an iOS Shortcut to send Apple Watch workout data to this app after each workout.
+          </p>
+          <div className="text-xs text-muted-foreground space-y-2">
+            <p className="font-medium text-foreground">Setup:</p>
+            <ol className="list-decimal list-inside space-y-1">
+              <li>Open the <strong>Shortcuts</strong> app on your iPhone</li>
+              <li>Create a new Shortcut with these actions:</li>
+            </ol>
+            <div className="bg-secondary rounded-lg p-3 space-y-1 text-xs font-mono">
+              <p>1. <strong>Find Health Samples</strong></p>
+              <p className="pl-4">Type: Workout</p>
+              <p className="pl-4">Sort by: Start Date (Latest First)</p>
+              <p className="pl-4">Limit: 1</p>
+              <p>2. <strong>Get Contents of URL</strong></p>
+              <p className="pl-4">URL: {window.location.origin}/api/watch</p>
+              <p className="pl-4">Method: POST</p>
+              <p className="pl-4">Body (JSON):</p>
+              <p className="pl-6">{`{`}</p>
+              <p className="pl-8">"type": [Workout Type],</p>
+              <p className="pl-8">"start": [Start Date],</p>
+              <p className="pl-8">"end": [End Date],</p>
+              <p className="pl-8">"duration": [Duration in min],</p>
+              <p className="pl-8">"activeCalories": [Active Energy],</p>
+              <p className="pl-8">"avgHeartRate": [Avg Heart Rate]</p>
+              <p className="pl-6">{`}`}</p>
+              <p>3. <strong>Open URLs</strong></p>
+              <p className="pl-4">URL: [Import URL from step 2]</p>
+            </div>
+            <p>Run this Shortcut after each Apple Watch workout, or set it as an automation triggered when a workout ends.</p>
           </div>
         </CardContent>
       </Card>

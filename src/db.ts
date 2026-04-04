@@ -112,6 +112,22 @@ export interface FavoriteMeal {
   usageCount: number
 }
 
+export interface WatchMetrics {
+  id?: number
+  date: string              // YYYY-MM-DD
+  workoutId?: number        // FK to Workout, if we can match it
+  watchWorkoutType: string  // "Running", "Traditional Strength Training", etc.
+  startTime: string         // ISO datetime
+  endTime: string           // ISO datetime
+  durationMinutes: number
+  activeCalories?: number
+  totalCalories?: number
+  avgHeartRate?: number
+  maxHeartRate?: number
+  distanceMeters?: number
+  rawData?: string          // full JSON from Shortcuts for debugging
+}
+
 export interface PlannedExercise {
   exerciseId: string       // stable ID or custom-generated ID
   name: string
@@ -153,6 +169,7 @@ class HealthTrackerDB extends Dexie {
   mealLogs!: Table<MealLog>
   favoriteMeals!: Table<FavoriteMeal>
   workoutPlans!: Table<WorkoutPlan>
+  watchMetrics!: Table<WatchMetrics>
 
   constructor() {
     super('HealthTrackerDB')
@@ -176,6 +193,18 @@ class HealthTrackerDB extends Dexie {
       mealLogs: '++id, date, [date+timeOfDay]',
       favoriteMeals: '++id, name, usageCount',
       workoutPlans: '++id, name, createdAt',
+    })
+    this.version(3).stores({
+      workouts: '++id, date, type, [date+type]',
+      exerciseSets: '++id, workoutId, exerciseId, [workoutId+exerciseId]',
+      runDetails: '++id, workoutId',
+      rowDetails: '++id, workoutId',
+      yogaMobilityDetails: '++id, workoutId',
+      dailyCheckIns: '++id, &date',
+      mealLogs: '++id, date, [date+timeOfDay]',
+      favoriteMeals: '++id, name, usageCount',
+      workoutPlans: '++id, name, createdAt',
+      watchMetrics: '++id, date, workoutId, startTime',
     })
   }
 }
