@@ -1,11 +1,12 @@
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { format } from 'date-fns'
-import { ArrowLeft, Plus, Play, Edit, Trash2, Dumbbell, Footprints, Waves } from 'lucide-react'
+import { ArrowLeft, Plus, Play, Edit, Trash2, Dumbbell, Footprints, Waves, Share2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { db } from '@/db'
+import { generateShareUrl } from '@/lib/plan-sharing'
 import type { WorkoutPlan } from '@/db'
 
 export function WorkoutPlansPage() {
@@ -41,6 +42,17 @@ export function WorkoutPlansPage() {
     }
 
     navigate(`/workout/${workoutId}`)
+  }
+
+  async function handleShare(plan: WorkoutPlan) {
+    const url = generateShareUrl(plan)
+    try {
+      await navigator.clipboard.writeText(url)
+      alert(`Share link copied!\n\nSend this link to your phone to import "${plan.name}".`)
+    } catch {
+      // Fallback: show the URL for manual copy
+      prompt('Copy this share link:', url)
+    }
   }
 
   async function handleDelete(id: number) {
@@ -116,6 +128,10 @@ export function WorkoutPlansPage() {
                       <button type="button" onClick={() => navigate(`/plans/edit/${plan.id}`)}
                         className="p-2 text-muted-foreground hover:text-foreground">
                         <Edit className="w-4 h-4" />
+                      </button>
+                      <button type="button" onClick={() => handleShare(plan)}
+                        className="p-2 text-muted-foreground hover:text-blue-500" title="Share plan">
+                        <Share2 className="w-4 h-4" />
                       </button>
                       <button type="button" onClick={() => handleDelete(plan.id!)}
                         className="p-2 text-muted-foreground hover:text-red-500">
