@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ArrowLeft, Check, Clock } from 'lucide-react'
+import { ArrowLeft, Check, Clock, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ExerciseCard } from '@/components/workout/ExerciseCard'
@@ -266,6 +266,16 @@ export function WorkoutActivePage() {
     })
   }, [])
 
+  async function handleDelete() {
+    if (!confirm('Delete this workout?')) return
+    await db.exerciseSets.where('workoutId').equals(workoutId).delete()
+    await db.runDetails.where('workoutId').equals(workoutId).delete()
+    await db.rowDetails.where('workoutId').equals(workoutId).delete()
+    await db.yogaMobilityDetails.where('workoutId').equals(workoutId).delete()
+    await db.workouts.delete(workoutId)
+    navigate('/')
+  }
+
   async function handleFinish() {
     if (!workout) return
 
@@ -313,9 +323,14 @@ export function WorkoutActivePage() {
     <div className="p-4 space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <button onClick={() => navigate(-1)} className="p-2 -ml-2">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => navigate(-1)} className="p-2 -ml-2">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <button onClick={handleDelete} className="p-2 text-muted-foreground hover:text-red-500" title="Delete workout">
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
         <div className="text-center">
           <h1 className="text-lg font-bold">{workoutLabels[workout.type] || workout.type}</h1>
           {!workout.completedAt && (
