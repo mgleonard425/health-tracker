@@ -43,7 +43,7 @@ async function readBlob(key: string): Promise<unknown | null> {
   try {
     const { blobs } = await list({ prefix: key, limit: 1 })
     if (blobs.length === 0) return null
-    const response = await get(blobs[0].url)
+    const response = await get(blobs[0].url, { access: 'private' })
     if (!response) return null
     const text = await new Response(response.body).text()
     return JSON.parse(text)
