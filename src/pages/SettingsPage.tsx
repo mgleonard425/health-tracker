@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Download, Key, Trash2, Watch, Cloud, Copy, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Download, Key, Trash2, Watch, Cloud, Copy, RefreshCw, Upload } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -271,6 +271,23 @@ export function SettingsPage() {
               <p>This syncs recovery metrics to the cloud for your planning agent.</p>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Import from Apple Health */}
+      <Card>
+        <CardContent className="pt-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Upload className="w-4 h-4 text-muted-foreground" />
+            <h2 className="font-medium text-sm">Import from Apple Health</h2>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Import workout history from an Apple Health export file.
+          </p>
+          <Button variant="outline" className="w-full" onClick={() => navigate('/import-health')}>
+            <Upload className="w-4 h-4 mr-2" />
+            Import Health Export
+          </Button>
         </CardContent>
       </Card>
 
