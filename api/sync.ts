@@ -68,6 +68,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // --- GET: Return coaching notes + plan adjustments ---
   if (req.method === 'GET') {
+    // Debug mode: ?debug=1 shows blob diagnostics
+    if (req.query.debug === '1') {
+      const key = blobKey(token, 'app-data.json')
+      const debugInfo: Record<string, unknown> = { key }
+      try {
+        const { blobs } = await list({ prefix: key, limit: 1 })
+        debugInfo.listResult = blobs.map(b => ({ url: b.url, pathname: b.pathname, size: b.size }))
+        if (blobs.length > 0) {
+          const response = await get(blobs[0].url, { access: 'private' })
+          debugInfo.getResult = response ? 'ok' : 'null'
+          if (response) {
+            const text = await new Response(response.body).text()
+            debugInfo.dataLength = text.length
+            debugInfo.dataPreview = text.slice(0, 200)
+          }
+        }
+      } catch (e) {
+        debugInfo.error = e instanceof Error ? e.message : String(e)
+      }
+      // Also list ALL blobs for this token
+      try {
+        const { blobs } = await list({ prefix: `sync/${token}/`, limit: 20 })
+        debugInfo.allBlobs = blobs.map(b => ({ pathname: b.pathname, size: b.size }))
+      } catch (e) {
+        debugInfo.allBlobsError = e instanceof Error ? e.message : String(e)
+      }
+      return res.status(200).json(debugInfo)
+    }
+
     const coachingNotes = await readBlob(blobKey(token, 'coaching-notes.json'))
     const planAdjustments = await readBlob(blobKey(token, 'plan-adjustments.json'))
     return res.status(200).json({
