@@ -690,7 +690,7 @@ export function WorkoutActivePage() {
                   onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
                   onAddSet={() => handleAddSet(ex.id)}
                   onRemoveSet={() => handleRemoveSet(ex.id)}
-                  onRemoveExercise={!workout.completedAt ? () => handleRemoveExercise(ex.id) : undefined}
+                  onRemoveExercise={() => handleRemoveExercise(ex.id)}
                 />
               )
             })}
@@ -727,16 +727,15 @@ export function WorkoutActivePage() {
                   onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
                   onAddSet={() => handleAddSet(ex.id)}
                   onRemoveSet={() => handleRemoveSet(ex.id)}
-                  onRemoveExercise={!workout.completedAt ? () => handleRemoveExercise(ex.id) : undefined}
+                  onRemoveExercise={() => handleRemoveExercise(ex.id)}
                 />
               ))}
             </SortableContext>
           </DndContext>
 
           {/* Add exercise to template workout */}
-          {!workout.completedAt && (
-            <>
-              <button
+          <>
+            <button
                 type="button"
                 onClick={() => setShowExerciseAdder(prev => !prev)}
                 className="w-full flex items-center justify-center gap-1 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -759,7 +758,6 @@ export function WorkoutActivePage() {
                 />
               )}
             </>
-          )}
         </>
       )}
 
@@ -776,11 +774,11 @@ export function WorkoutActivePage() {
         <YogaMobilityForm workoutId={workoutId} onFinish={handleFinish} />
       )}
 
-      {/* Finish button at bottom */}
-      {((isExerciseBased && !isCustom) || (isCustom && !buildPhase)) && !workout.completedAt && (
+      {/* Finish / Save button at bottom */}
+      {((isExerciseBased && !isCustom) || (isCustom && !buildPhase)) && (
         <Button className="w-full h-12 text-base" onClick={handleFinish}>
           <Check className="w-5 h-5 mr-2" />
-          Finish Workout
+          {workout.completedAt ? 'Save Changes' : 'Finish Workout'}
         </Button>
       )}
     </div>
