@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ArrowLeft, Check, Clock, Trash2, Watch } from 'lucide-react'
+import { format } from 'date-fns'
+import { ArrowLeft, Check, Trash2, Watch, CalendarDays, Plus, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -44,10 +45,10 @@ export function WorkoutActivePage() {
   const workoutId = Number(id)
 
   const workout = useLiveQuery(() => db.workouts.get(workoutId), [workoutId])
+  const dateInputRef = useRef<HTMLInputElement>(null)
   const [exerciseSets, setExerciseSets] = useState<ExerciseSetsMap>({})
   const [lastSessionData, setLastSessionData] = useState<Record<string, ExerciseSet[]>>({})
   const [initialized, setInitialized] = useState(false)
-  const [elapsed, setElapsed] = useState(0)
 
   // Custom workout state
   const [customExercises, setCustomExercises] = useState<ExerciseTemplate[]>([])
@@ -55,6 +56,7 @@ export function WorkoutActivePage() {
   const [includeRun, setIncludeRun] = useState(false)
   const [includeRow, setIncludeRow] = useState(false)
   const [buildPhase, setBuildPhase] = useState(true) // true = picking exercises, false = logging
+  const [showExerciseAdder, setShowExerciseAdder] = useState(false)
 
   // Plan data
   const [coachingNotes, setCoachingNotes] = useState<Record<string, string>>({})
@@ -74,16 +76,6 @@ export function WorkoutActivePage() {
   const isStrength = workout?.type === 'strength-a' || workout?.type === 'strength-b'
   const isExerciseBased = isStrength || isPrehab || (isCustom && !buildPhase)
 
-  // Timer
-  useEffect(() => {
-    if (!workout?.startedAt || workout.completedAt) return
-    const start = new Date(workout.startedAt).getTime()
-    const interval = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - start) / 1000))
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [workout?.startedAt, workout?.completedAt])
-
   // Initialize sets from template + last session data (non-custom workouts)
   useEffect(() => {
     if (!workout || initialized || isCustom) return
@@ -92,22 +84,42 @@ export function WorkoutActivePage() {
 
     async function init() {
       const existingSets = await getExerciseSetsForWorkout(workoutId)
+      const templateIds = new Set(exercises.map(e => e.id))
+
       if (existingSets.length > 0) {
         const map: ExerciseSetsMap = {}
+        const allExercises = [...exercises]
         for (const ex of exercises) {
           const saved = existingSets.filter(s => s.exerciseId === ex.id)
           map[ex.id] = saved.map(s => ({
-            weight: s.weight,
-            reps: s.reps,
-            duration: s.duration,
-            bandResistance: s.bandResistance,
-            completed: s.completed,
-            notes: s.notes,
+            weight: s.weight, reps: s.reps, duration: s.duration,
+            bandResistance: s.bandResistance, completed: s.completed, notes: s.notes,
           }))
           if (map[ex.id].length === 0) {
             map[ex.id] = createDefaultSets(ex)
           }
         }
+        // Detect additional exercises saved from template+customize
+        const additionalIds = [...new Set(existingSets.map(s => s.exerciseId).filter(id => !templateIds.has(id)))]
+        for (const id of additionalIds) {
+          const saved = existingSets.filter(s => s.exerciseId === id)
+          const template = allExerciseTemplates.find(t => t.id === id)
+          allExercises.push(template || {
+            id,
+            name: id.startsWith('custom-') ? id.slice(7).replace(/-\d+$/, '').replace(/-/g, ' ') : id,
+            defaultSets: saved.length,
+            defaultReps: saved[0]?.reps,
+            defaultDuration: saved[0]?.duration,
+            weightUnit: 'lbs' as const,
+            hasBandResistance: !!saved[0]?.bandResistance,
+          })
+          map[id] = saved.map(s => ({
+            weight: s.weight, reps: s.reps, duration: s.duration,
+            bandResistance: s.bandResistance, completed: s.completed, notes: s.notes,
+          }))
+        }
+        setCustomExercises(allExercises)
+        setCustomSelectedIds(new Set(allExercises.map(e => e.id)))
         setExerciseSets(map)
         setInitialized(true)
         return
@@ -129,17 +141,15 @@ export function WorkoutActivePage() {
         const last = lastSets[ex.id]
         if (last && last.length > 0) {
           map[ex.id] = last.map(s => ({
-            weight: s.weight,
-            reps: s.reps,
-            duration: s.duration,
-            bandResistance: s.bandResistance,
-            completed: false,
-            notes: undefined,
+            weight: s.weight, reps: s.reps, duration: s.duration,
+            bandResistance: s.bandResistance, completed: false, notes: undefined,
           }))
         } else {
           map[ex.id] = createDefaultSets(ex)
         }
       }
+      setCustomExercises([...exercises])
+      setCustomSelectedIds(new Set(exercises.map(e => e.id)))
       setExerciseSets(map)
       setInitialized(true)
     }
@@ -286,6 +296,37 @@ export function WorkoutActivePage() {
     setCustomExercises(exs => [...exs, exercise])
   }
 
+  // Reorder exercises in the custom workout list
+  function handleReorderExercise(fromIndex: number, toIndex: number) {
+    setCustomExercises(prev => {
+      const next = [...prev]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return next
+    })
+  }
+
+  // Template workout: toggle a non-template exercise on/off
+  function handleTemplateToggle(exercise: ExerciseTemplate) {
+    if (exercises.some(e => e.id === exercise.id)) return // can't remove template exercises
+    if (customSelectedIds.has(exercise.id)) {
+      setCustomSelectedIds(prev => { const next = new Set(prev); next.delete(exercise.id); return next })
+      setCustomExercises(exs => exs.filter(e => e.id !== exercise.id))
+      setExerciseSets(prev => { const next = { ...prev }; delete next[exercise.id]; return next })
+    } else {
+      setCustomSelectedIds(prev => new Set([...prev, exercise.id]))
+      setCustomExercises(exs => [...exs, exercise])
+      setExerciseSets(prev => ({ ...prev, [exercise.id]: createDefaultSets(exercise) }))
+    }
+  }
+
+  // Template workout: add a freeform custom exercise (immediately init sets)
+  function handleTemplateAddCustom(exercise: ExerciseTemplate) {
+    setCustomSelectedIds(prev => new Set([...prev, exercise.id]))
+    setCustomExercises(exs => [...exs, exercise])
+    setExerciseSets(prev => ({ ...prev, [exercise.id]: createDefaultSets(exercise) }))
+  }
+
   // Custom workout: transition from build to log phase
   async function handleStartCustom() {
     // Initialize sets for selected exercises, loading last-session data
@@ -388,7 +429,7 @@ export function WorkoutActivePage() {
     if (!workout) return
 
     // Save all exercise sets
-    const exerciseList = isCustom ? customExercises : exercises
+    const exerciseList = customExercises
     const setsToSave: Omit<ExerciseSet, 'id'>[] = []
     for (const ex of exerciseList) {
       const sets = exerciseSets[ex.id] || []
@@ -417,12 +458,6 @@ export function WorkoutActivePage() {
     navigate('/')
   }
 
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60)
-    const s = seconds % 60
-    return `${m}:${s.toString().padStart(2, '0')}`
-  }
-
   if (!workout) {
     return <div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">Loading...</div>
   }
@@ -441,12 +476,25 @@ export function WorkoutActivePage() {
         </div>
         <div className="text-center">
           <h1 className="text-lg font-bold">{workoutLabels[workout.type] || workout.type}</h1>
-          {!workout.completedAt && (
-            <div className="flex items-center justify-center gap-1 text-sm text-muted-foreground">
-              <Clock className="w-3 h-3" />
-              {formatTime(elapsed)}
-            </div>
-          )}
+          <button
+            className="flex items-center justify-center gap-1 text-xs text-muted-foreground mx-auto"
+            onClick={() => dateInputRef.current?.showPicker()}
+          >
+            <CalendarDays className="w-3 h-3" />
+            {format(new Date(workout.date + 'T12:00:00'), 'EEE, MMM d')}
+          </button>
+          <input
+            ref={dateInputRef}
+            type="date"
+            className="sr-only"
+            value={workout.date}
+            onChange={async (e) => {
+              const newDate = e.target.value
+              if (newDate && newDate !== workout.date) {
+                await db.workouts.update(workoutId, { date: newDate })
+              }
+            }}
+          />
         </div>
         {workout.completedAt ? (
           <Badge variant="secondary">Done</Badge>
@@ -509,8 +557,10 @@ export function WorkoutActivePage() {
         <>
           <ExercisePicker
             selectedIds={customSelectedIds}
+            customExercises={customExercises}
             onToggle={handleToggleExercise}
             onAddCustomExercise={handleAddCustomExercise}
+            onReorder={handleReorderExercise}
             includeRun={includeRun}
             onToggleRun={() => setIncludeRun(r => !r)}
             includeRow={includeRow}
@@ -567,7 +617,7 @@ export function WorkoutActivePage() {
                 onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
                 onAddSet={() => handleAddSet(ex.id)}
                 onRemoveSet={() => handleRemoveSet(ex.id)}
-                isPrehab={ex.hasBandResistance}
+
               />
             )
           })}
@@ -585,7 +635,7 @@ export function WorkoutActivePage() {
       ))}
 
       {/* Custom workout without plan sections: flat list */}
-      {isCustom && !buildPhase && !hasPlanSections && customExercises.map((ex) => {
+      {isCustom && !buildPhase && !hasPlanSections && customExercises.map((ex, i) => {
         const coaching = coachingNotes[ex.id]
         const exerciseWithNotes = coaching
           ? { ...ex, notes: coaching + (ex.notes ? ` | ${ex.notes}` : '') }
@@ -599,7 +649,8 @@ export function WorkoutActivePage() {
             onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
             onAddSet={() => handleAddSet(ex.id)}
             onRemoveSet={() => handleRemoveSet(ex.id)}
-            isPrehab={ex.hasBandResistance}
+            onMoveUp={!workout.completedAt && i > 0 ? () => handleReorderExercise(i, i - 1) : undefined}
+            onMoveDown={!workout.completedAt && i < customExercises.length - 1 ? () => handleReorderExercise(i, i + 1) : undefined}
           />
         )
       })}
@@ -619,18 +670,51 @@ export function WorkoutActivePage() {
       )}
 
       {/* Exercise-based template workouts (non-custom) */}
-      {!isCustom && isExerciseBased && exercises.map((ex) => (
-        <ExerciseCard
-          key={ex.id}
-          exercise={ex}
-          sets={exerciseSets[ex.id] || []}
-          lastSessionSets={lastSessionData[ex.id]}
-          onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
-          onAddSet={() => handleAddSet(ex.id)}
-          onRemoveSet={() => handleRemoveSet(ex.id)}
-          isPrehab={isPrehab}
-        />
-      ))}
+      {!isCustom && isExerciseBased && (
+        <>
+          {customExercises.map((ex, i) => (
+            <ExerciseCard
+              key={ex.id}
+              exercise={ex}
+              sets={exerciseSets[ex.id] || []}
+              lastSessionSets={lastSessionData[ex.id]}
+              onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
+              onAddSet={() => handleAddSet(ex.id)}
+              onRemoveSet={() => handleRemoveSet(ex.id)}
+              onMoveUp={!workout.completedAt && i > 0 ? () => handleReorderExercise(i, i - 1) : undefined}
+              onMoveDown={!workout.completedAt && i < customExercises.length - 1 ? () => handleReorderExercise(i, i + 1) : undefined}
+            />
+          ))}
+
+          {/* Add exercise to template workout */}
+          {!workout.completedAt && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowExerciseAdder(prev => !prev)}
+                className="w-full flex items-center justify-center gap-1 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showExerciseAdder ? <ChevronUp className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                {showExerciseAdder ? 'Done Adding' : 'Add Exercise'}
+              </button>
+              {showExerciseAdder && (
+                <ExercisePicker
+                  selectedIds={customSelectedIds}
+                  customExercises={[]}
+                  onToggle={handleTemplateToggle}
+                  onAddCustomExercise={handleTemplateAddCustom}
+                  includeRun={false}
+                  onToggleRun={() => {}}
+                  includeRow={false}
+                  onToggleRow={() => {}}
+                  showCardio={false}
+                  compact
+                />
+              )}
+            </>
+          )}
+        </>
+      )}
 
       {/* Non-custom single-type forms */}
       {workout.type === 'run' && (

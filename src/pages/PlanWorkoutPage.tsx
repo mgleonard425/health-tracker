@@ -337,6 +337,7 @@ export function PlanWorkoutPage() {
                 {isExerciseSection && (
                   <ExercisePicker
                     selectedIds={allSelectedIds}
+                    customExercises={[]}
                     onToggle={handleToggleExercise}
                     onAddCustomExercise={handleAddCustomExercise}
                     includeRun={false}

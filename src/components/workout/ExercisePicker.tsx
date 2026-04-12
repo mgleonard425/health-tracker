@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, ChevronDown, ChevronUp, X, ArrowUp, ArrowDown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -14,12 +14,16 @@ type CustomExerciseType = 'weight-reps' | 'reps-only' | 'duration' | 'band-reps'
 
 interface ExercisePickerProps {
   selectedIds: Set<string>
+  customExercises: ExerciseTemplate[]
   onToggle: (exercise: ExerciseTemplate) => void
   onAddCustomExercise: (exercise: ExerciseTemplate) => void
+  onReorder?: (fromIndex: number, toIndex: number) => void
   includeRun: boolean
   onToggleRun: () => void
   includeRow: boolean
   onToggleRow: () => void
+  showCardio?: boolean
+  compact?: boolean
 }
 
 const groups = [
@@ -35,7 +39,7 @@ const customTypes: { value: CustomExerciseType; label: string }[] = [
   { value: 'band-reps', label: 'Band + Reps' },
 ]
 
-export function ExercisePicker({ selectedIds, onToggle, onAddCustomExercise, includeRun, onToggleRun, includeRow, onToggleRow }: ExercisePickerProps) {
+export function ExercisePicker({ selectedIds, customExercises, onToggle, onAddCustomExercise, onReorder, includeRun, onToggleRun, includeRow, onToggleRow, showCardio = true, compact }: ExercisePickerProps) {
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
   const [showCustomForm, setShowCustomForm] = useState(false)
   const [customName, setCustomName] = useState('')
@@ -63,7 +67,7 @@ export function ExercisePicker({ selectedIds, onToggle, onAddCustomExercise, inc
 
   return (
     <div className="space-y-2">
-      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Build Your Workout</h2>
+      {!compact && <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Build Your Workout</h2>}
 
       {/* Exercise groups */}
       {groups.map(group => {
@@ -155,21 +159,18 @@ export function ExercisePicker({ selectedIds, onToggle, onAddCustomExercise, inc
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Sets:</span>
-              <div className="flex gap-1">
-                {[1, 2, 3, 4].map(n => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setCustomSets(n)}
-                    className={cn(
-                      'w-8 h-8 rounded text-xs font-bold transition-colors touch-manipulation',
-                      customSets === n ? 'bg-primary text-primary-foreground' : 'bg-background/50 text-muted-foreground'
-                    )}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={20}
+                value={customSets}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value)
+                  if (!isNaN(v) && v >= 1 && v <= 20) setCustomSets(v)
+                }}
+                className="w-14 h-8 rounded bg-background/50 text-center text-sm font-bold border border-border"
+              />
               <button
                 type="button"
                 onClick={handleAddCustom}
@@ -187,31 +188,90 @@ export function ExercisePicker({ selectedIds, onToggle, onAddCustomExercise, inc
       </div>
 
       {/* Cardio options */}
-      <div className="bg-secondary rounded-lg px-3 py-3 space-y-2">
-        <span className="text-sm font-medium">Add Cardio</span>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onToggleRun}
-            className={cn(
-              'flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation',
-              includeRun ? 'bg-orange-600 text-white' : 'bg-background/50 text-muted-foreground'
-            )}
-          >
-            {includeRun ? '✓ Run' : '+ Run'}
-          </button>
-          <button
-            type="button"
-            onClick={onToggleRow}
-            className={cn(
-              'flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation',
-              includeRow ? 'bg-cyan-600 text-white' : 'bg-background/50 text-muted-foreground'
-            )}
-          >
-            {includeRow ? '✓ Row' : '+ Row'}
-          </button>
+      {showCardio && (
+        <div className="bg-secondary rounded-lg px-3 py-3 space-y-2">
+          <span className="text-sm font-medium">Add Cardio</span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onToggleRun}
+              className={cn(
+                'flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation',
+                includeRun ? 'bg-orange-600 text-white' : 'bg-background/50 text-muted-foreground'
+              )}
+            >
+              {includeRun ? '✓ Run' : '+ Run'}
+            </button>
+            <button
+              type="button"
+              onClick={onToggleRow}
+              className={cn(
+                'flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation',
+                includeRow ? 'bg-cyan-600 text-white' : 'bg-background/50 text-muted-foreground'
+              )}
+            >
+              {includeRow ? '✓ Row' : '+ Row'}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Selected exercises summary */}
+      {!compact && (customExercises.length > 0 || includeRun || includeRow) && (
+        <div className="bg-secondary rounded-lg px-3 py-3 space-y-1">
+          <span className="text-sm font-medium">Your Workout</span>
+          {customExercises.map((ex, i) => (
+            <div key={ex.id} className="flex items-center justify-between px-3 py-1.5 bg-background/50 rounded-md">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xs text-muted-foreground tabular-nums w-4 shrink-0">{i + 1}</span>
+                <span className="text-sm truncate">{ex.name}</span>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {ex.defaultSets}×{ex.defaultReps ? `${ex.defaultReps}` : ex.defaultDuration ? `${ex.defaultDuration}s` : ''}
+                </span>
+              </div>
+              <div className="flex items-center shrink-0">
+                {onReorder && (
+                  <>
+                    <button type="button" onClick={() => onReorder(i, i - 1)} disabled={i === 0}
+                      className={cn('p-1 text-muted-foreground', i === 0 && 'opacity-20')}>
+                      <ArrowUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button type="button" onClick={() => onReorder(i, i + 1)} disabled={i === customExercises.length - 1}
+                      className={cn('p-1 text-muted-foreground', i === customExercises.length - 1 && 'opacity-20')}>
+                      <ArrowDown className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                )}
+                <button type="button" onClick={() => onToggle(ex)} className="p-1 text-muted-foreground hover:text-red-500">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+          {includeRun && (
+            <div className="flex items-center justify-between px-3 py-1.5 bg-background/50 rounded-md">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground tabular-nums w-4">{customExercises.length + 1}</span>
+                <span className="text-sm">Run</span>
+              </div>
+              <button type="button" onClick={onToggleRun} className="p-1 text-muted-foreground hover:text-red-500 shrink-0">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+          {includeRow && (
+            <div className="flex items-center justify-between px-3 py-1.5 bg-background/50 rounded-md">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground tabular-nums w-4">{customExercises.length + (includeRun ? 2 : 1)}</span>
+                <span className="text-sm">Row</span>
+              </div>
+              <button type="button" onClick={onToggleRow} className="p-1 text-muted-foreground hover:text-red-500 shrink-0">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

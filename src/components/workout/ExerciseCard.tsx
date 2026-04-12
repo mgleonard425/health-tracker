@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, MessageSquare, Plus, Minus } from 'lucide-react'
+import { ChevronDown, ChevronUp, MessageSquare, Plus, Minus, ArrowUp, ArrowDown } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Stepper } from './Stepper'
@@ -23,7 +23,8 @@ interface ExerciseCardProps {
   onUpdateSet: (setIndex: number, data: Partial<SetData>) => void
   onAddSet?: () => void
   onRemoveSet?: () => void
-  isPrehab?: boolean
+  onMoveUp?: () => void
+  onMoveDown?: () => void
 }
 
 const bandColors: Record<BandResistance, string> = {
@@ -32,9 +33,10 @@ const bandColors: Record<BandResistance, string> = {
   heavy: 'bg-red-600',
 }
 
-export function ExerciseCard({ exercise, sets, lastSessionSets, onUpdateSet, onAddSet, onRemoveSet, isPrehab }: ExerciseCardProps) {
+export function ExerciseCard({ exercise, sets, lastSessionSets, onUpdateSet, onAddSet, onRemoveSet, onMoveUp, onMoveDown }: ExerciseCardProps) {
   const [expanded, setExpanded] = useState(true)
   const [showNotes, setShowNotes] = useState<number | null>(null)
+  const completedCount = sets.filter(s => s.completed).length
 
   const lastSessionSummary = lastSessionSets && lastSessionSets.length > 0
     ? lastSessionSets[0].weight
@@ -46,9 +48,8 @@ export function ExerciseCard({ exercise, sets, lastSessionSets, onUpdateSet, onA
 
   return (
     <Card className="overflow-hidden">
-      <button
-        type="button"
-        className="w-full px-4 py-3 flex items-center justify-between text-left"
+      <div
+        className="w-full px-4 py-3 flex items-center justify-between text-left cursor-pointer"
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex-1 min-w-0">
@@ -63,36 +64,67 @@ export function ExerciseCard({ exercise, sets, lastSessionSets, onUpdateSet, onA
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="text-xs">{sets.length} sets</Badge>
+          {(onMoveUp || onMoveDown) && (
+            <div className="flex items-center" onClick={e => e.stopPropagation()}>
+              <button type="button" disabled={!onMoveUp} onClick={onMoveUp}
+                className={cn('p-1 text-muted-foreground touch-manipulation', !onMoveUp && 'opacity-20')}>
+                <ArrowUp className="w-3.5 h-3.5" />
+              </button>
+              <button type="button" disabled={!onMoveDown} onClick={onMoveDown}
+                className={cn('p-1 text-muted-foreground touch-manipulation', !onMoveDown && 'opacity-20')}>
+                <ArrowDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+          <Badge
+            variant="secondary"
+            className={cn(
+              'text-xs',
+              completedCount === sets.length && sets.length > 0 && 'bg-emerald-600/20 text-emerald-400'
+            )}
+          >
+            {completedCount}/{sets.length}
+          </Badge>
           {exercise.isOptional && <Badge variant="secondary" className="text-xs">Optional</Badge>}
           {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </div>
-      </button>
+      </div>
 
       {expanded && (
         <CardContent className="pt-0 pb-3 space-y-3">
           {sets.map((set, i) => (
-            <div key={i} className="space-y-2">
-              {/* Set header */}
-              {sets.length > 1 && (
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground font-medium">Set {i + 1}</span>
-                  {isPrehab && (
-                    <button
-                      type="button"
-                      onClick={() => onUpdateSet(i, { completed: !set.completed })}
-                      className={cn(
-                        'w-6 h-6 rounded border-2 flex items-center justify-center transition-colors',
-                        set.completed
-                          ? 'bg-emerald-600 border-emerald-600 text-white'
-                          : 'border-muted-foreground/40'
-                      )}
-                    >
-                      {set.completed && <span className="text-xs font-bold">✓</span>}
-                    </button>
-                  )}
-                </div>
+            <div
+              key={i}
+              className={cn(
+                'space-y-2 rounded-lg p-2 -mx-2 transition-colors',
+                set.completed && 'bg-emerald-950/20'
               )}
+            >
+              {/* Set header with checkbox */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onUpdateSet(i, { completed: !set.completed })}
+                    className={cn(
+                      'w-7 h-7 rounded-md border-2 flex items-center justify-center transition-colors touch-manipulation',
+                      set.completed
+                        ? 'bg-emerald-600 border-emerald-600 text-white'
+                        : 'border-muted-foreground/40'
+                    )}
+                  >
+                    {set.completed && <span className="text-sm font-bold">✓</span>}
+                  </button>
+                  <span className="text-xs text-muted-foreground font-medium">Set {i + 1}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowNotes(showNotes === i ? null : i)}
+                  className="text-xs text-muted-foreground flex items-center gap-1"
+                >
+                  <MessageSquare className="w-3 h-3" />
+                </button>
+              </div>
 
               <div className="flex items-center justify-center gap-4 flex-wrap">
                 {/* Weight stepper (if not bodyweight/band exercise) */}
@@ -100,7 +132,7 @@ export function ExerciseCard({ exercise, sets, lastSessionSets, onUpdateSet, onA
                   <Stepper
                     value={set.weight}
                     onChange={(v) => onUpdateSet(i, { weight: v })}
-                    step={5}
+                    step={2.5}
                     min={0}
                     unit="lb"
                     label="Weight"
@@ -155,35 +187,7 @@ export function ExerciseCard({ exercise, sets, lastSessionSets, onUpdateSet, onA
                 )}
               </div>
 
-              {/* Prehab single-set checkbox */}
-              {isPrehab && sets.length === 1 && (
-                <div className="flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => onUpdateSet(i, { completed: !set.completed })}
-                    className={cn(
-                      'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
-                      set.completed
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-secondary text-muted-foreground'
-                    )}
-                  >
-                    {set.completed ? '✓ Done' : 'Mark Done'}
-                  </button>
-                </div>
-              )}
-
-              {/* Notes toggle */}
-              <div className="flex justify-center">
-                <button
-                  type="button"
-                  onClick={() => setShowNotes(showNotes === i ? null : i)}
-                  className="text-xs text-muted-foreground flex items-center gap-1"
-                >
-                  <MessageSquare className="w-3 h-3" />
-                  Note
-                </button>
-              </div>
+              {/* Notes */}
               {showNotes === i && (
                 <input
                   type="text"

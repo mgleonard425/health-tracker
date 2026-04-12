@@ -51,7 +51,7 @@ export function RowForm({ workoutId, onFinish }: RowFormProps) {
         <CardContent className="pt-4">
           <div className="flex justify-around">
             <Stepper value={duration} onChange={setDuration} step={1} min={1} unit="min" label="Duration" />
-            <Stepper value={distance} onChange={setDistance} step={100} min={0} unit="m" label="Distance" />
+            <Stepper value={distance} onChange={setDistance} step={50} min={0} unit="m" label="Distance" />
           </div>
         </CardContent>
       </Card>

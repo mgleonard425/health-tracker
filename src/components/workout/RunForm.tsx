@@ -166,8 +166,8 @@ export function RunForm({ workoutId, onFinish, embedded }: RunFormProps) {
 
             {/* Distance & Duration */}
             <div className="flex justify-around">
-              <Stepper value={seg.distance} onChange={(v) => updateSegment(i, { distance: v })} step={0.5} min={0} unit="mi" label="Distance" />
-              <Stepper value={seg.duration} onChange={(v) => updateSegment(i, { duration: v })} step={1} min={0} unit="min" label="Duration" />
+              <Stepper value={seg.distance} onChange={(v) => updateSegment(i, { distance: v })} step={0.1} min={0} unit="mi" label="Distance" />
+              <Stepper value={seg.duration} onChange={(v) => updateSegment(i, { duration: v })} step={0.5} min={0} unit="min" label="Duration" />
             </div>
             {seg.distance > 0 && seg.duration > 0 && (
               <div className="text-center text-sm text-muted-foreground">
