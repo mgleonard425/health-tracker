@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Home, Dumbbell, BarChart3, Calendar } from 'lucide-react'
+import { Home, Dumbbell, BarChart3, Calendar, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const tabs = [
@@ -8,6 +8,7 @@ const tabs = [
   { path: '/history', label: 'Log', icon: Dumbbell },
   { path: '/dashboard', label: 'Dashboard', icon: BarChart3 },
   { path: '/plan', label: 'Plan', icon: Calendar },
+  { path: '/settings', label: 'Settings', icon: Settings },
 ]
 
 export function AppShell({ children }: { children: ReactNode }) {
