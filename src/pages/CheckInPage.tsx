@@ -12,6 +12,7 @@ import { BodyStatusPicker } from '@/components/checkin/BodyStatusPicker'
 import { MealLogger } from '@/components/checkin/MealLogger'
 import { db } from '@/db'
 import { cn } from '@/lib/utils'
+import { syncToCloud } from '@/lib/sync'
 import type { BodyAreaStatus } from '@/db'
 
 const today = format(new Date(), 'yyyy-MM-dd')
@@ -67,6 +68,10 @@ export function CheckInPage() {
     } else {
       await db.dailyCheckIns.add(data)
     }
+
+    // Fire-and-forget cloud sync
+    syncToCloud().catch(() => {})
+
     navigate('/')
   }
 

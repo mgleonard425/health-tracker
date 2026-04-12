@@ -6,6 +6,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { db } from '@/db'
+import { RecoveryCard } from '@/components/today/RecoveryCard'
+import { CoachingNotes } from '@/components/today/CoachingNotes'
+import { useCloudSync } from '@/hooks/useCloudSync'
 import { getTodaySchedule, getCurrentWeekPlan, getDaysUntilRace, getCurrentWeekNumber } from '@/data/training-plan'
 import type { WorkoutType } from '@/db'
 
@@ -33,6 +36,7 @@ const quickActions: { label: string; type: WorkoutType; color: string }[] = [
 
 export function TodayPage() {
   const navigate = useNavigate()
+  useCloudSync() // Pull coaching notes from cloud on mount
   const schedule = getTodaySchedule()
   const weekPlan = getCurrentWeekPlan()
   const daysUntilRace = getDaysUntilRace()
@@ -86,6 +90,12 @@ export function TodayPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Recovery metrics from Apple Watch */}
+      <RecoveryCard />
+
+      {/* Coaching notes from planning agent */}
+      <CoachingNotes />
 
       {/* Quick Actions */}
       <div>

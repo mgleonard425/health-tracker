@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { format, parseISO } from 'date-fns'
+import { Watch } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { db } from '@/db'
@@ -31,6 +32,12 @@ export function HistoryPage() {
     () => db.workouts.orderBy('date').reverse().limit(50).toArray(),
     []
   )
+
+  // Get workout IDs that have linked watch metrics
+  const watchWorkoutIds = useLiveQuery(async () => {
+    const metrics = await db.watchMetrics.toArray()
+    return new Set(metrics.filter(m => m.workoutId).map(m => m.workoutId!))
+  }, [])
 
   if (!workouts) {
     return <div className="flex items-center justify-center min-h-[50vh] text-muted-foreground">Loading...</div>
@@ -69,6 +76,9 @@ export function HistoryPage() {
                       <span className="font-medium text-sm">{typeLabels[w.type] || w.type}</span>
                     </div>
                     <div className="flex items-center gap-2">
+                      {watchWorkoutIds?.has(w.id!) && (
+                        <Watch className="w-3.5 h-3.5 text-muted-foreground" />
+                      )}
                       {w.completedAt ? (
                         <Badge variant="secondary" className="text-xs">
                           {format(new Date(w.completedAt), 'h:mm a')}

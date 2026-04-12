@@ -17,6 +17,7 @@ import { YogaMobilityForm } from '@/components/workout/YogaMobilityForm'
 import { db, getLastWorkoutOfType, getExerciseSetsForWorkout } from '@/db'
 import { getExercisesForWorkoutType, strengthAExercises, strengthBExercises, prehabExercises } from '@/data/workout-templates'
 import type { ExerciseTemplate } from '@/data/workout-templates'
+import { syncToCloud } from '@/lib/sync'
 import type { ExerciseSet, BandResistance, SupersetGroup } from '@/db'
 
 interface SetData {
@@ -585,6 +586,9 @@ export function WorkoutActivePage() {
       await db.exerciseSets.bulkAdd(setsToSave)
     }
     await db.workouts.update(workoutId, { completedAt: new Date().toISOString() })
+
+    // Fire-and-forget cloud sync
+    syncToCloud().catch(() => {})
 
     navigate('/')
   }
