@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { format } from 'date-fns'
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { ExerciseCard } from '@/components/workout/ExerciseCard'
+import { SupersetCard } from '@/components/workout/SupersetCard'
 import { ExercisePicker } from '@/components/workout/ExercisePicker'
 import { RunForm } from '@/components/workout/RunForm'
 import { RowForm } from '@/components/workout/RowForm'
@@ -16,7 +17,7 @@ import { YogaMobilityForm } from '@/components/workout/YogaMobilityForm'
 import { db, getLastWorkoutOfType, getExerciseSetsForWorkout } from '@/db'
 import { getExercisesForWorkoutType, strengthAExercises, strengthBExercises, prehabExercises } from '@/data/workout-templates'
 import type { ExerciseTemplate } from '@/data/workout-templates'
-import type { ExerciseSet, BandResistance } from '@/db'
+import type { ExerciseSet, BandResistance, SupersetGroup } from '@/db'
 
 interface SetData {
   weight?: number
@@ -57,6 +58,22 @@ function SortableExerciseCard({ id, ...props }: { id: string } & React.Component
   )
 }
 
+function SortableSupersetCard({ id, ...props }: { id: string } & React.ComponentProps<typeof SupersetCard>) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style: React.CSSProperties = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transition: transition || undefined,
+    opacity: isDragging ? 0.5 : 1,
+    position: 'relative',
+    zIndex: isDragging ? 10 : undefined,
+  }
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <SupersetCard {...props} dragHandleProps={listeners} />
+    </div>
+  )
+}
+
 export function WorkoutActivePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -75,6 +92,23 @@ export function WorkoutActivePage() {
   const [includeRow, setIncludeRow] = useState(false)
   const [buildPhase, setBuildPhase] = useState(true) // true = picking exercises, false = logging
   const [showExerciseAdder, setShowExerciseAdder] = useState(false)
+  const [supersetGroups, setSupersetGroups] = useState<SupersetGroup[]>([])
+
+  // Render items: interleave individual exercises and superset groups
+  const renderItems = useMemo(() => {
+    const items: { type: 'exercise' | 'superset'; id: string }[] = []
+    const seenGroups = new Set<string>()
+    for (const ex of customExercises) {
+      const group = supersetGroups.find(g => g.exerciseIds.includes(ex.id))
+      if (group && !seenGroups.has(group.id)) {
+        seenGroups.add(group.id)
+        items.push({ type: 'superset', id: group.id })
+      } else if (!group) {
+        items.push({ type: 'exercise', id: ex.id })
+      }
+    }
+    return items
+  }, [customExercises, supersetGroups])
 
   // Plan data
   const [coachingNotes, setCoachingNotes] = useState<Record<string, string>>({})
@@ -322,13 +356,41 @@ export function WorkoutActivePage() {
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
-    if (over && active.id !== over.id) {
-      setCustomExercises(prev => {
-        const oldIndex = prev.findIndex(e => e.id === active.id)
-        const newIndex = prev.findIndex(e => e.id === over.id)
-        return arrayMove(prev, oldIndex, newIndex)
-      })
-    }
+    if (!over || active.id === over.id) return
+
+    // Find indices in renderItems (which may contain group IDs)
+    const oldIdx = renderItems.findIndex(i => i.id === active.id)
+    const newIdx = renderItems.findIndex(i => i.id === over.id)
+    if (oldIdx === -1 || newIdx === -1) return
+
+    // Reorder customExercises: move all exercises belonging to the dragged item
+    setCustomExercises(prev => {
+      const draggedItem = renderItems[oldIdx]
+      const targetItem = renderItems[newIdx]
+
+      // Get exercise IDs for the dragged block
+      const draggedIds = draggedItem.type === 'superset'
+        ? supersetGroups.find(g => g.id === draggedItem.id)?.exerciseIds || []
+        : [draggedItem.id]
+
+      // Get first exercise ID of the target to find insertion point
+      const targetFirstId = targetItem.type === 'superset'
+        ? supersetGroups.find(g => g.id === targetItem.id)?.exerciseIds[0]
+        : targetItem.id
+
+      // Remove dragged exercises
+      const without = prev.filter(e => !draggedIds.includes(e.id))
+      const draggedExercises = draggedIds.map(id => prev.find(e => e.id === id)!).filter(Boolean)
+
+      // Find insertion point
+      const targetIdx = without.findIndex(e => e.id === targetFirstId)
+      const insertAt = oldIdx < newIdx ? targetIdx + 1 : targetIdx
+
+      // Insert
+      const result = [...without]
+      result.splice(insertAt < 0 ? result.length : insertAt, 0, ...draggedExercises)
+      return result
+    })
   }
 
   // Remove an exercise from the workout (during logging)
@@ -336,11 +398,43 @@ export function WorkoutActivePage() {
     setCustomExercises(exs => exs.filter(e => e.id !== exerciseId))
     setCustomSelectedIds(prev => { const next = new Set(prev); next.delete(exerciseId); return next })
     setExerciseSets(prev => { const next = { ...prev }; delete next[exerciseId]; return next })
+    // Clean up superset groups
+    setSupersetGroups(prev => prev
+      .map(g => g.exerciseIds.includes(exerciseId) ? { ...g, exerciseIds: g.exerciseIds.filter(id => id !== exerciseId) } : g)
+      .filter(g => g.exerciseIds.length >= 2)
+    )
   }
 
   // Reorder exercises in the build phase "Your Workout" list (for ExercisePicker callback)
   function handleReorderExercise(fromIndex: number, toIndex: number) {
     setCustomExercises(prev => arrayMove(prev, fromIndex, toIndex))
+  }
+
+  // Superset handlers
+  function handleCreateSuperset(exerciseIds: string[]) {
+    if (exerciseIds.length < 2) return
+    const id = `group-${Date.now()}`
+    setSupersetGroups(prev => [...prev, { id, exerciseIds }])
+  }
+
+  function handleUngroup(groupId: string) {
+    setSupersetGroups(prev => prev.filter(g => g.id !== groupId))
+  }
+
+  function handleAddRound(groupId: string) {
+    const group = supersetGroups.find(g => g.id === groupId)
+    if (!group) return
+    for (const exId of group.exerciseIds) {
+      handleAddSet(exId)
+    }
+  }
+
+  function handleRemoveRound(groupId: string) {
+    const group = supersetGroups.find(g => g.id === groupId)
+    if (!group) return
+    for (const exId of group.exerciseIds) {
+      handleRemoveSet(exId)
+    }
   }
 
   // Template workout: toggle a non-template exercise on/off
@@ -602,6 +696,9 @@ export function WorkoutActivePage() {
             onToggleRun={() => setIncludeRun(r => !r)}
             includeRow={includeRow}
             onToggleRow={() => setIncludeRow(r => !r)}
+            supersetGroups={supersetGroups}
+            onCreateSuperset={handleCreateSuperset}
+            onRemoveSuperset={handleUngroup}
           />
           {(customSelectedIds.size > 0 || includeRun || includeRow) && (
             <Button className="w-full h-12 text-base" onClick={handleStartCustom}>
@@ -674,8 +771,26 @@ export function WorkoutActivePage() {
       {/* Custom workout without plan sections: flat list */}
       {isCustom && !buildPhase && !hasPlanSections && (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={customExercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
-            {customExercises.map((ex) => {
+          <SortableContext items={renderItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
+            {renderItems.map((item) => {
+              if (item.type === 'superset') {
+                const group = supersetGroups.find(g => g.id === item.id)!
+                const groupExercises = group.exerciseIds.map(id => customExercises.find(e => e.id === id)!).filter(Boolean)
+                return (
+                  <SortableSupersetCard
+                    id={group.id}
+                    key={group.id}
+                    group={group}
+                    exercises={groupExercises}
+                    exerciseSets={exerciseSets}
+                    onUpdateSet={(exId, setIndex, data) => handleUpdateSet(exId, setIndex, data)}
+                    onAddRound={() => handleAddRound(group.id)}
+                    onRemoveRound={() => handleRemoveRound(group.id)}
+                    onUngroup={() => handleUngroup(group.id)}
+                  />
+                )
+              }
+              const ex = customExercises.find(e => e.id === item.id)!
               const coaching = coachingNotes[ex.id]
               const exerciseWithNotes = coaching
                 ? { ...ex, notes: coaching + (ex.notes ? ` | ${ex.notes}` : '') }
@@ -716,20 +831,40 @@ export function WorkoutActivePage() {
       {!isCustom && isExerciseBased && (
         <>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={customExercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
-              {customExercises.map((ex) => (
-                <SortableExerciseCard
-                  id={ex.id}
-                  key={ex.id}
-                  exercise={ex}
-                  sets={exerciseSets[ex.id] || []}
-                  lastSessionSets={lastSessionData[ex.id]}
-                  onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
-                  onAddSet={() => handleAddSet(ex.id)}
-                  onRemoveSet={() => handleRemoveSet(ex.id)}
-                  onRemoveExercise={() => handleRemoveExercise(ex.id)}
-                />
-              ))}
+            <SortableContext items={renderItems.map(i => i.id)} strategy={verticalListSortingStrategy}>
+              {renderItems.map((item) => {
+                if (item.type === 'superset') {
+                  const group = supersetGroups.find(g => g.id === item.id)!
+                  const groupExercises = group.exerciseIds.map(id => customExercises.find(e => e.id === id)!).filter(Boolean)
+                  return (
+                    <SortableSupersetCard
+                      id={group.id}
+                      key={group.id}
+                      group={group}
+                      exercises={groupExercises}
+                      exerciseSets={exerciseSets}
+                      onUpdateSet={(exId, setIndex, data) => handleUpdateSet(exId, setIndex, data)}
+                      onAddRound={() => handleAddRound(group.id)}
+                      onRemoveRound={() => handleRemoveRound(group.id)}
+                      onUngroup={() => handleUngroup(group.id)}
+                    />
+                  )
+                }
+                const ex = customExercises.find(e => e.id === item.id)!
+                return (
+                  <SortableExerciseCard
+                    id={ex.id}
+                    key={ex.id}
+                    exercise={ex}
+                    sets={exerciseSets[ex.id] || []}
+                    lastSessionSets={lastSessionData[ex.id]}
+                    onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
+                    onAddSet={() => handleAddSet(ex.id)}
+                    onRemoveSet={() => handleRemoveSet(ex.id)}
+                    onRemoveExercise={() => handleRemoveExercise(ex.id)}
+                  />
+                )
+              })}
             </SortableContext>
           </DndContext>
 

@@ -141,12 +141,18 @@ export interface PlannedExercise {
 
 export type PlanSectionType = 'exercises' | 'run' | 'row'
 
+export interface SupersetGroup {
+  id: string              // "group-{timestamp}"
+  exerciseIds: string[]   // ordered exercise IDs in this group
+}
+
 export interface PlanSection {
   id: string               // unique within the plan (e.g., "section-1")
   name: string             // "Warmup", "Cardio A", "Strength", etc.
   type: PlanSectionType
   exercises: PlannedExercise[]  // populated for 'exercises' type
   notes?: string           // section-level notes (run/row instructions, or general notes)
+  supersets?: SupersetGroup[]  // optional exercise groupings for round-based logging
 }
 
 export interface WorkoutPlan {

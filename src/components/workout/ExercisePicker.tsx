@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, ChevronDown, ChevronUp, X, GripVertical } from 'lucide-react'
+import { Plus, ChevronDown, ChevronUp, X, GripVertical, Link, Unlink } from 'lucide-react'
 import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +11,7 @@ import {
   prehabExercises,
   type ExerciseTemplate,
 } from '@/data/workout-templates'
+import type { SupersetGroup } from '@/db'
 
 type CustomExerciseType = 'weight-reps' | 'reps-only' | 'duration' | 'band-reps'
 
@@ -26,6 +27,9 @@ interface ExercisePickerProps {
   onToggleRow: () => void
   showCardio?: boolean
   compact?: boolean
+  supersetGroups?: SupersetGroup[]
+  onCreateSuperset?: (exerciseIds: string[]) => void
+  onRemoveSuperset?: (groupId: string) => void
 }
 
 const groups = [
@@ -60,12 +64,14 @@ function SortableWorkoutItem({ id, children }: { id: string; children: React.Rea
   )
 }
 
-export function ExercisePicker({ selectedIds, customExercises, onToggle, onAddCustomExercise, onReorder, includeRun, onToggleRun, includeRow, onToggleRow, showCardio = true, compact }: ExercisePickerProps) {
+export function ExercisePicker({ selectedIds, customExercises, onToggle, onAddCustomExercise, onReorder, includeRun, onToggleRun, includeRow, onToggleRow, showCardio = true, compact, supersetGroups = [], onCreateSuperset, onRemoveSuperset }: ExercisePickerProps) {
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
   const [showCustomForm, setShowCustomForm] = useState(false)
   const [customName, setCustomName] = useState('')
   const [customType, setCustomType] = useState<CustomExerciseType>('reps-only')
   const [customSets, setCustomSets] = useState(3)
+  const [groupMode, setGroupMode] = useState(false)
+  const [groupSelection, setGroupSelection] = useState<Set<string>>(new Set())
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -254,22 +260,108 @@ export function ExercisePicker({ selectedIds, customExercises, onToggle, onAddCu
       {/* Selected exercises summary */}
       {!compact && (customExercises.length > 0 || includeRun || includeRow) && (
         <div className="bg-secondary rounded-lg px-3 py-3 space-y-1">
-          <span className="text-sm font-medium">Your Workout</span>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium">Your Workout</span>
+            {onCreateSuperset && customExercises.length >= 2 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (groupMode && groupSelection.size >= 2) {
+                    onCreateSuperset([...groupSelection])
+                    setGroupSelection(new Set())
+                    setGroupMode(false)
+                  } else {
+                    setGroupMode(!groupMode)
+                    setGroupSelection(new Set())
+                  }
+                }}
+                className={cn(
+                  'flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors touch-manipulation',
+                  groupMode
+                    ? groupSelection.size >= 2 ? 'bg-violet-600 text-white' : 'bg-violet-600/30 text-violet-300'
+                    : 'text-muted-foreground'
+                )}
+              >
+                <Link className="w-3 h-3" />
+                {groupMode ? (groupSelection.size >= 2 ? 'Make Superset' : 'Select 2+') : 'Group'}
+              </button>
+            )}
+          </div>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={customExercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
-              {customExercises.map((ex) => (
-                <SortableWorkoutItem key={ex.id} id={ex.id}>
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <span className="text-sm truncate">{ex.name}</span>
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {ex.defaultSets}×{ex.defaultReps ? `${ex.defaultReps}` : ex.defaultDuration ? `${ex.defaultDuration}s` : ''}
-                    </span>
-                  </div>
-                  <button type="button" onClick={() => onToggle(ex)} className="p-1 text-muted-foreground hover:text-red-500 shrink-0">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </SortableWorkoutItem>
-              ))}
+              {(() => {
+                const seenGroups = new Set<string>()
+                return customExercises.map((ex) => {
+                  const group = supersetGroups.find(g => g.exerciseIds.includes(ex.id))
+
+                  // If this exercise is in a superset, render the group block (once)
+                  if (group) {
+                    if (seenGroups.has(group.id)) return null
+                    seenGroups.add(group.id)
+                    const groupExercises = group.exerciseIds.map(id => customExercises.find(e => e.id === id)!).filter(Boolean)
+                    return (
+                      <div key={group.id} className="border-l-2 border-l-violet-500 rounded-md bg-background/50 px-3 py-1.5 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-violet-400 uppercase tracking-wide">
+                            {groupExercises.length === 2 ? 'Superset' : 'Circuit'}
+                          </span>
+                          {onRemoveSuperset && (
+                            <button type="button" onClick={() => onRemoveSuperset(group.id)} className="p-0.5 text-muted-foreground hover:text-violet-400">
+                              <Unlink className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                        {groupExercises.map(gex => (
+                          <div key={gex.id} className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span className="text-sm truncate">{gex.name}</span>
+                              <span className="text-xs text-muted-foreground shrink-0">
+                                {gex.defaultSets}×{gex.defaultReps ? `${gex.defaultReps}` : gex.defaultDuration ? `${gex.defaultDuration}s` : ''}
+                              </span>
+                            </div>
+                            <button type="button" onClick={() => onToggle(gex)} className="p-1 text-muted-foreground hover:text-red-500 shrink-0">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  }
+
+                  // Ungrouped exercise
+                  return (
+                    <SortableWorkoutItem key={ex.id} id={ex.id}>
+                      {groupMode && (
+                        <button
+                          type="button"
+                          onClick={() => setGroupSelection(prev => {
+                            const next = new Set(prev)
+                            next.has(ex.id) ? next.delete(ex.id) : next.add(ex.id)
+                            return next
+                          })}
+                          className={cn(
+                            'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors touch-manipulation',
+                            groupSelection.has(ex.id) ? 'bg-violet-600 border-violet-600 text-white' : 'border-muted-foreground/40'
+                          )}
+                        >
+                          {groupSelection.has(ex.id) && <span className="text-xs font-bold">✓</span>}
+                        </button>
+                      )}
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-sm truncate">{ex.name}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {ex.defaultSets}×{ex.defaultReps ? `${ex.defaultReps}` : ex.defaultDuration ? `${ex.defaultDuration}s` : ''}
+                        </span>
+                      </div>
+                      {!groupMode && (
+                        <button type="button" onClick={() => onToggle(ex)} className="p-1 text-muted-foreground hover:text-red-500 shrink-0">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </SortableWorkoutItem>
+                  )
+                })
+              })()}
             </SortableContext>
           </DndContext>
           {includeRun && (
