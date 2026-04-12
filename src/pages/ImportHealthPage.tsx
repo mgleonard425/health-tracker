@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Upload, CheckCircle, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Upload, CheckCircle, Loader2, ChevronDown, ChevronUp, Heart, Activity, Moon, Footprints, Flame, Wind } from 'lucide-react'
 import JSZip from 'jszip'
 import { format, subDays } from 'date-fns'
 import { Button } from '@/components/ui/button'
@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { db } from '@/db'
 import type { WorkoutType } from '@/db'
 
-// --- Types ---
+// ── Types ──────────────────────────────────────────────────────────
 
 interface ParsedWorkout {
   activityType: string
@@ -25,7 +25,18 @@ interface ParsedWorkout {
   selected: boolean
 }
 
-// --- Apple → App type mapping ---
+interface ParsedHealthDay {
+  date: string // YYYY-MM-DD
+  restingHeartRate?: number
+  heartRateVariability?: number
+  sleepDurationMinutes: number
+  sleepStages: { deep: number; core: number; rem: number; awake: number }
+  vo2Max?: number
+  steps: number
+  activeCalories: number
+}
+
+// ── Apple → App type mapping ───────────────────────────────────────
 
 const appleTypeToWorkoutType: Record<string, WorkoutType> = {
   HKWorkoutActivityTypeRunning: 'run',
@@ -58,11 +69,11 @@ const appleTypeDisplayNames: Record<string, string> = {
   HKWorkoutActivityTypeStairClimbing: 'Stair Climbing',
 }
 
-function displayName(activityType: string): string {
+function getDisplayName(activityType: string): string {
   return appleTypeDisplayNames[activityType] || activityType.replace('HKWorkoutActivityType', '')
 }
 
-// --- XML parsing ---
+// ── XML helpers ────────────────────────────────────────────────────
 
 function getAttr(tag: string, name: string): string | undefined {
   const match = tag.match(new RegExp(`${name}="([^"]*)"`, ''))
@@ -70,15 +81,16 @@ function getAttr(tag: string, name: string): string | undefined {
 }
 
 function parseAppleDate(s: string): Date {
-  // Apple format: "2024-01-15 07:30:00 -0800"
   return new Date(s)
 }
 
 function convertDistance(value: number, unit: string): number {
   if (unit === 'km') return value * 1000
   if (unit === 'mi') return value * 1609.34
-  return value // assume meters
+  return value
 }
+
+// ── Workout extraction ─────────────────────────────────────────────
 
 function extractWorkouts(xml: string, after: Date, before: Date): ParsedWorkout[] {
   const results: ParsedWorkout[] = []
@@ -88,14 +100,12 @@ function extractWorkouts(xml: string, after: Date, before: Date): ParsedWorkout[
     const tagStart = xml.indexOf('<Workout ', idx)
     if (tagStart === -1) break
 
-    // Find the end of the opening tag (could be self-closing or not)
     const tagEnd = xml.indexOf('>', tagStart)
     if (tagEnd === -1) break
 
     const openingTag = xml.slice(tagStart, tagEnd + 1)
     const isSelfClosing = openingTag.endsWith('/>')
 
-    // Find the block end
     let blockEnd: number
     if (isSelfClosing) {
       blockEnd = tagEnd + 1
@@ -105,20 +115,17 @@ function extractWorkouts(xml: string, after: Date, before: Date): ParsedWorkout[
       blockEnd = closeTag + '</Workout>'.length
     }
 
-    // Quick date filter from opening tag attributes
     const startStr = getAttr(openingTag, 'startDate')
     if (!startStr) { idx = blockEnd; continue }
 
     const startDate = parseAppleDate(startStr)
     if (startDate < after || startDate > before) { idx = blockEnd; continue }
 
-    // Parse attributes from opening tag
     const activityType = getAttr(openingTag, 'workoutActivityType') || 'Unknown'
     const duration = parseFloat(getAttr(openingTag, 'duration') || '0')
     const endStr = getAttr(openingTag, 'endDate')
     const sourceName = getAttr(openingTag, 'sourceName')
 
-    // Distance from attributes
     let distanceMeters: number | undefined
     const totalDist = getAttr(openingTag, 'totalDistance')
     const totalDistUnit = getAttr(openingTag, 'totalDistanceUnit')
@@ -126,19 +133,16 @@ function extractWorkouts(xml: string, after: Date, before: Date): ParsedWorkout[
       distanceMeters = convertDistance(parseFloat(totalDist), totalDistUnit)
     }
 
-    // Calories from attributes
     let activeCalories: number | undefined
     const totalCal = getAttr(openingTag, 'totalEnergyBurned')
     if (totalCal) activeCalories = Math.round(parseFloat(totalCal))
 
-    // Parse WorkoutStatistics from the block content (only for non-self-closing)
     let avgHeartRate: number | undefined
     let maxHeartRate: number | undefined
 
     if (!isSelfClosing) {
       const blockContent = xml.slice(tagEnd + 1, blockEnd)
 
-      // Heart rate stats
       const hrMatch = blockContent.match(/<WorkoutStatistics[^>]*type="HKQuantityTypeIdentifierHeartRate"[^>]*\/>/)
       if (hrMatch) {
         const avg = getAttr(hrMatch[0], 'average')
@@ -147,7 +151,6 @@ function extractWorkouts(xml: string, after: Date, before: Date): ParsedWorkout[
         if (max) maxHeartRate = Math.round(parseFloat(max))
       }
 
-      // Override distance from stats if not from attributes
       if (!distanceMeters) {
         const distMatch = blockContent.match(/<WorkoutStatistics[^>]*type="HKQuantityTypeIdentifierDistance(?:WalkingRunning|Cycling|Swimming)"[^>]*\/>/)
         if (distMatch) {
@@ -157,7 +160,6 @@ function extractWorkouts(xml: string, after: Date, before: Date): ParsedWorkout[
         }
       }
 
-      // Override calories from stats
       if (!activeCalories) {
         const calMatch = blockContent.match(/<WorkoutStatistics[^>]*type="HKQuantityTypeIdentifierActiveEnergyBurned"[^>]*\/>/)
         if (calMatch) {
@@ -169,7 +171,7 @@ function extractWorkouts(xml: string, after: Date, before: Date): ParsedWorkout[
 
     results.push({
       activityType,
-      displayName: displayName(activityType),
+      displayName: getDisplayName(activityType),
       startDate,
       endDate: endStr ? parseAppleDate(endStr) : new Date(startDate.getTime() + duration * 60000),
       durationMinutes: Math.round(duration),
@@ -187,7 +189,124 @@ function extractWorkouts(xml: string, after: Date, before: Date): ParsedWorkout[
   return results.sort((a, b) => b.startDate.getTime() - a.startDate.getTime())
 }
 
-// --- Component ---
+// ── Health metrics extraction ──────────────────────────────────────
+
+const HEALTH_RECORD_TYPES = new Set([
+  'HKQuantityTypeIdentifierRestingHeartRate',
+  'HKQuantityTypeIdentifierHeartRateVariabilitySDNN',
+  'HKCategoryTypeIdentifierSleepAnalysis',
+  'HKQuantityTypeIdentifierVO2Max',
+  'HKQuantityTypeIdentifierStepCount',
+  'HKQuantityTypeIdentifierActiveEnergyBurned',
+])
+
+function extractHealthMetrics(xml: string, after: Date, before: Date): ParsedHealthDay[] {
+  const days = new Map<string, ParsedHealthDay>()
+  let idx = 0
+
+  function getOrCreateDay(dateKey: string): ParsedHealthDay {
+    if (!days.has(dateKey)) {
+      days.set(dateKey, {
+        date: dateKey,
+        sleepDurationMinutes: 0,
+        sleepStages: { deep: 0, core: 0, rem: 0, awake: 0 },
+        steps: 0,
+        activeCalories: 0,
+      })
+    }
+    return days.get(dateKey)!
+  }
+
+  while (true) {
+    const tagStart = xml.indexOf('<Record ', idx)
+    if (tagStart === -1) break
+
+    const tagEnd = xml.indexOf('>', tagStart)
+    if (tagEnd === -1) break
+
+    const openingTag = xml.slice(tagStart, tagEnd + 1)
+
+    // Advance past this record
+    if (openingTag.endsWith('/>')) {
+      idx = tagEnd + 1
+    } else {
+      const closeTag = xml.indexOf('</Record>', tagEnd)
+      idx = closeTag === -1 ? tagEnd + 1 : closeTag + '</Record>'.length
+    }
+
+    // Quick type check — skip irrelevant records fast
+    const typeMatch = openingTag.match(/type="([^"]*)"/)
+    if (!typeMatch || !HEALTH_RECORD_TYPES.has(typeMatch[1])) continue
+
+    const type = typeMatch[1]
+    const startStr = getAttr(openingTag, 'startDate')
+    const endStr = getAttr(openingTag, 'endDate')
+    if (!startStr) continue
+
+    const startDate = parseAppleDate(startStr)
+    const isSleep = type === 'HKCategoryTypeIdentifierSleepAnalysis'
+
+    // For sleep, attribute to the wake-up day (endDate)
+    const recordDate = isSleep && endStr ? parseAppleDate(endStr) : startDate
+    if (recordDate < after || recordDate > before) continue
+
+    const dateKey = format(recordDate, 'yyyy-MM-dd')
+    const day = getOrCreateDay(dateKey)
+    const value = getAttr(openingTag, 'value')
+
+    switch (type) {
+      case 'HKQuantityTypeIdentifierRestingHeartRate':
+        // Latest value wins (records are chronological)
+        if (value) day.restingHeartRate = Math.round(parseFloat(value))
+        break
+
+      case 'HKQuantityTypeIdentifierHeartRateVariabilitySDNN':
+        if (value) day.heartRateVariability = Math.round(parseFloat(value))
+        break
+
+      case 'HKQuantityTypeIdentifierVO2Max':
+        if (value) day.vo2Max = Math.round(parseFloat(value) * 10) / 10
+        break
+
+      case 'HKQuantityTypeIdentifierStepCount':
+        if (value) day.steps += Math.round(parseFloat(value))
+        break
+
+      case 'HKQuantityTypeIdentifierActiveEnergyBurned':
+        if (value) day.activeCalories += Math.round(parseFloat(value))
+        break
+
+      case 'HKCategoryTypeIdentifierSleepAnalysis': {
+        if (!endStr) break
+        const end = parseAppleDate(endStr)
+        const mins = Math.round((end.getTime() - startDate.getTime()) / 60000)
+        if (mins <= 0) break
+
+        if (value?.includes('AsleepDeep')) {
+          day.sleepStages.deep += mins
+          day.sleepDurationMinutes += mins
+        } else if (value?.includes('AsleepCore')) {
+          day.sleepStages.core += mins
+          day.sleepDurationMinutes += mins
+        } else if (value?.includes('AsleepREM')) {
+          day.sleepStages.rem += mins
+          day.sleepDurationMinutes += mins
+        } else if (value?.includes('Awake')) {
+          day.sleepStages.awake += mins
+          // Awake doesn't count toward sleep duration
+        } else if (value?.includes('Asleep')) {
+          // AsleepUnspecified or generic Asleep
+          day.sleepDurationMinutes += mins
+        }
+        break
+      }
+    }
+  }
+
+  return Array.from(days.values()).sort((a, b) => b.date.localeCompare(a.date))
+}
+
+// ── Component ──────────────────────────────────────────────────────
 
 type Step = 'upload' | 'parsing' | 'preview' | 'importing' | 'done'
 
@@ -197,9 +316,13 @@ export function ImportHealthPage() {
   const [step, setStep] = useState<Step>('upload')
   const [progress, setProgress] = useState('')
   const [workouts, setWorkouts] = useState<ParsedWorkout[]>([])
+  const [healthDays, setHealthDays] = useState<ParsedHealthDay[]>([])
   const [importedCount, setImportedCount] = useState(0)
+  const [healthDaysImported, setHealthDaysImported] = useState(0)
   const [daysBack, setDaysBack] = useState(7)
   const [error, setError] = useState('')
+  const [importWorkouts, setImportWorkouts] = useState(true)
+  const [importHealth, setImportHealth] = useState(true)
 
   async function handleFile(file: File) {
     setStep('parsing')
@@ -224,18 +347,29 @@ export function ImportHealthPage() {
         xmlText = await file.text()
       }
 
-      setProgress('Scanning for workouts...')
       const cutoff = subDays(new Date(), daysBack)
       cutoff.setHours(0, 0, 0, 0)
-      const found = extractWorkouts(xmlText, cutoff, new Date())
+      const now = new Date()
 
-      if (found.length === 0) {
-        setError(`No workouts found in the last ${daysBack} days.`)
+      setProgress('Scanning for workouts...')
+      // Use setTimeout to let the UI update before heavy parsing
+      await new Promise(r => setTimeout(r, 50))
+      const foundWorkouts = extractWorkouts(xmlText, cutoff, now)
+
+      setProgress('Scanning for health metrics...')
+      await new Promise(r => setTimeout(r, 50))
+      const foundHealth = extractHealthMetrics(xmlText, cutoff, now)
+
+      if (foundWorkouts.length === 0 && foundHealth.length === 0) {
+        setError(`No data found in the last ${daysBack} days.`)
         setStep('upload')
         return
       }
 
-      setWorkouts(found)
+      setWorkouts(foundWorkouts)
+      setHealthDays(foundHealth)
+      setImportWorkouts(foundWorkouts.length > 0)
+      setImportHealth(foundHealth.length > 0)
       setStep('preview')
     } catch (e) {
       setError(`Failed to parse file: ${e instanceof Error ? e.message : 'Unknown error'}`)
@@ -245,74 +379,103 @@ export function ImportHealthPage() {
 
   async function handleImport() {
     setStep('importing')
-    const selected = workouts.filter(w => w.selected)
-    let count = 0
+    let workoutCount = 0
+    let healthCount = 0
 
-    for (const w of selected) {
-      const dateStr = format(w.startDate, 'yyyy-MM-dd')
-      const workoutType = appleTypeToWorkoutType[w.activityType] || 'custom'
+    // Import workouts
+    if (importWorkouts) {
+      const selected = workouts.filter(w => w.selected)
+      for (const w of selected) {
+        const dateStr = format(w.startDate, 'yyyy-MM-dd')
+        const workoutType = appleTypeToWorkoutType[w.activityType] || 'custom'
 
-      // Check for duplicate: same date + start time within 2 minutes
-      const existing = await db.watchMetrics
-        .where('date').equals(dateStr)
-        .toArray()
-      const isDuplicate = existing.some(e => {
-        const diff = Math.abs(new Date(e.startTime).getTime() - w.startDate.getTime())
-        return diff < 2 * 60 * 1000
-      })
-      if (isDuplicate) continue
-
-      // Create a Workout entry
-      const workoutId = await db.workouts.add({
-        date: dateStr,
-        type: workoutType,
-        startedAt: w.startDate.toISOString(),
-        completedAt: w.endDate.toISOString(),
-        notes: `Imported from Apple Health · ${w.displayName}`,
-      }) as number
-
-      // Create WatchMetrics entry linked to the workout
-      await db.watchMetrics.add({
-        date: dateStr,
-        workoutId,
-        watchWorkoutType: w.displayName,
-        startTime: w.startDate.toISOString(),
-        endTime: w.endDate.toISOString(),
-        durationMinutes: w.durationMinutes,
-        activeCalories: w.activeCalories,
-        avgHeartRate: w.avgHeartRate,
-        maxHeartRate: w.maxHeartRate,
-        distanceMeters: w.distanceMeters,
-      })
-
-      // If it's a run, also create a RunDetail
-      if (workoutType === 'run' && w.distanceMeters) {
-        const miles = w.distanceMeters / 1609.34
-        const mins = w.durationMinutes
-        await db.runDetails.add({
-          workoutId,
-          distanceMiles: Math.round(miles * 100) / 100,
-          durationMinutes: mins,
-          pacePerMile: mins > 0 && miles > 0 ? Math.round((mins / miles) * 60) : undefined,
-          runType: 'easy',
-          feelScale: 3,
+        const existing = await db.watchMetrics.where('date').equals(dateStr).toArray()
+        const isDuplicate = existing.some(e => {
+          const diff = Math.abs(new Date(e.startTime).getTime() - w.startDate.getTime())
+          return diff < 2 * 60 * 1000
         })
-      }
+        if (isDuplicate) continue
 
-      // If it's a row, create RowDetail
-      if (workoutType === 'row') {
-        await db.rowDetails.add({
+        const workoutId = await db.workouts.add({
+          date: dateStr,
+          type: workoutType,
+          startedAt: w.startDate.toISOString(),
+          completedAt: w.endDate.toISOString(),
+          notes: `Imported from Apple Health · ${w.displayName}`,
+        }) as number
+
+        await db.watchMetrics.add({
+          date: dateStr,
           workoutId,
+          watchWorkoutType: w.displayName,
+          startTime: w.startDate.toISOString(),
+          endTime: w.endDate.toISOString(),
           durationMinutes: w.durationMinutes,
-          distanceMeters: w.distanceMeters,
+          activeCalories: w.activeCalories,
           avgHeartRate: w.avgHeartRate,
+          maxHeartRate: w.maxHeartRate,
+          distanceMeters: w.distanceMeters,
         })
-      }
 
-      count++
+        if (workoutType === 'run' && w.distanceMeters) {
+          const miles = w.distanceMeters / 1609.34
+          const mins = w.durationMinutes
+          await db.runDetails.add({
+            workoutId,
+            distanceMiles: Math.round(miles * 100) / 100,
+            durationMinutes: mins,
+            pacePerMile: mins > 0 && miles > 0 ? Math.round((mins / miles) * 60) : undefined,
+            runType: 'easy',
+            feelScale: 3,
+          })
+        }
+
+        if (workoutType === 'row') {
+          await db.rowDetails.add({
+            workoutId,
+            durationMinutes: w.durationMinutes,
+            distanceMeters: w.distanceMeters,
+            avgHeartRate: w.avgHeartRate,
+          })
+        }
+
+        workoutCount++
+      }
     }
 
-    setImportedCount(count)
+    // Import health metrics
+    if (importHealth) {
+      for (const day of healthDays) {
+        // Upsert: check if there's already an entry for this date
+        const existing = await db.healthMetrics.where('date').equals(day.date).first()
+
+        const metrics = {
+          date: day.date,
+          restingHeartRate: day.restingHeartRate,
+          heartRateVariability: day.heartRateVariability,
+          sleepDurationMinutes: day.sleepDurationMinutes || undefined,
+          sleepStages: day.sleepDurationMinutes > 0 ? {
+            deep: Math.round(day.sleepStages.deep),
+            core: Math.round(day.sleepStages.core),
+            rem: Math.round(day.sleepStages.rem),
+            awake: Math.round(day.sleepStages.awake),
+          } : undefined,
+          vo2Max: day.vo2Max,
+          steps: day.steps || undefined,
+          activeCalories: day.activeCalories || undefined,
+        }
+
+        if (existing) {
+          await db.healthMetrics.update(existing.id!, metrics)
+        } else {
+          await db.healthMetrics.add(metrics)
+        }
+        healthCount++
+      }
+    }
+
+    setImportedCount(workoutCount)
+    setHealthDaysImported(healthCount)
     setStep('done')
   }
 
@@ -337,7 +500,7 @@ export function ImportHealthPage() {
           <Card>
             <CardContent className="pt-4 space-y-4">
               <div>
-                <label className="text-sm font-medium">Import workouts from the last</label>
+                <label className="text-sm font-medium">Import data from the last</label>
                 <div className="flex items-center gap-2 mt-1">
                   {[7, 14, 30, 90].map(d => (
                     <Button
@@ -397,31 +560,69 @@ export function ImportHealthPage() {
       {/* Preview step */}
       {step === 'preview' && (
         <>
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              Found <strong>{workouts.length}</strong> workout{workouts.length !== 1 ? 's' : ''}
-            </p>
-            <Button size="sm" variant="ghost" onClick={toggleAll}>
-              {workouts.every(w => w.selected) ? 'Deselect All' : 'Select All'}
-            </Button>
-          </div>
+          {/* Health Metrics Section */}
+          {healthDays.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Daily Health Metrics ({healthDays.length} day{healthDays.length !== 1 ? 's' : ''})
+                </h2>
+                <button
+                  onClick={() => setImportHealth(!importHealth)}
+                  className={`text-xs px-2 py-1 rounded ${importHealth ? 'bg-emerald-600 text-white' : 'bg-secondary text-muted-foreground'}`}
+                >
+                  {importHealth ? 'Included' : 'Excluded'}
+                </button>
+              </div>
 
-          <div className="space-y-2">
-            {workouts.map((w, i) => (
-              <WorkoutPreviewCard key={i} workout={w} onToggle={() => toggleWorkout(i)} />
-            ))}
-          </div>
+              <div className={importHealth ? '' : 'opacity-40'}>
+                {healthDays.map(day => (
+                  <HealthDayCard key={day.date} day={day} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Workouts Section */}
+          {workouts.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Workouts ({workouts.length})
+                </h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setImportWorkouts(!importWorkouts)}
+                    className={`text-xs px-2 py-1 rounded ${importWorkouts ? 'bg-emerald-600 text-white' : 'bg-secondary text-muted-foreground'}`}
+                  >
+                    {importWorkouts ? 'Included' : 'Excluded'}
+                  </button>
+                  {importWorkouts && (
+                    <Button size="sm" variant="ghost" onClick={toggleAll}>
+                      {workouts.every(w => w.selected) ? 'Deselect All' : 'Select All'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className={importWorkouts ? 'space-y-2' : 'space-y-2 opacity-40'}>
+                {workouts.map((w, i) => (
+                  <WorkoutPreviewCard key={i} workout={w} onToggle={() => importWorkouts && toggleWorkout(i)} />
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => { setStep('upload'); setWorkouts([]) }}>
+            <Button variant="outline" className="flex-1" onClick={() => { setStep('upload'); setWorkouts([]); setHealthDays([]) }}>
               Back
             </Button>
             <Button
               className="flex-1"
-              disabled={selectedCount === 0}
+              disabled={!importHealth && (!importWorkouts || selectedCount === 0)}
               onClick={handleImport}
             >
-              Import {selectedCount} Workout{selectedCount !== 1 ? 's' : ''}
+              Import
             </Button>
           </div>
         </>
@@ -432,7 +633,7 @@ export function ImportHealthPage() {
         <Card>
           <CardContent className="pt-6 text-center space-y-3">
             <Loader2 className="w-10 h-10 mx-auto animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Importing workouts...</p>
+            <p className="text-sm text-muted-foreground">Importing data...</p>
           </CardContent>
         </Card>
       )}
@@ -443,13 +644,20 @@ export function ImportHealthPage() {
           <CardContent className="pt-6 text-center space-y-4">
             <CheckCircle className="w-12 h-12 mx-auto text-emerald-500" />
             <h2 className="text-lg font-bold">Import Complete</h2>
-            <p className="text-sm text-muted-foreground">
-              {importedCount} workout{importedCount !== 1 ? 's' : ''} imported
-              {importedCount < selectedCount && ` (${selectedCount - importedCount} skipped as duplicates)`}
-            </p>
+            <div className="text-sm text-muted-foreground space-y-1">
+              {importedCount > 0 && (
+                <p>
+                  {importedCount} workout{importedCount !== 1 ? 's' : ''} imported
+                  {importWorkouts && importedCount < selectedCount && ` (${selectedCount - importedCount} skipped as duplicates)`}
+                </p>
+              )}
+              {healthDaysImported > 0 && (
+                <p>{healthDaysImported} day{healthDaysImported !== 1 ? 's' : ''} of health metrics imported</p>
+              )}
+            </div>
             <div className="flex flex-col gap-2 pt-2">
-              <Button onClick={() => navigate('/history')}>View History</Button>
-              <Button variant="outline" onClick={() => navigate('/')}>Go Home</Button>
+              <Button onClick={() => navigate('/')}>Go Home</Button>
+              <Button variant="outline" onClick={() => navigate('/history')}>View History</Button>
             </div>
           </CardContent>
         </Card>
@@ -458,7 +666,94 @@ export function ImportHealthPage() {
   )
 }
 
-// --- Workout preview card ---
+// ── Health day preview card ────────────────────────────────────────
+
+function HealthDayCard({ day }: { day: ParsedHealthDay }) {
+  const [expanded, setExpanded] = useState(false)
+  const sleepHrs = day.sleepDurationMinutes > 0
+    ? `${Math.floor(day.sleepDurationMinutes / 60)}h ${day.sleepDurationMinutes % 60}m`
+    : null
+
+  return (
+    <Card className="mb-2">
+      <CardContent className="py-3">
+        <div className="flex items-center justify-between" onClick={() => setExpanded(!expanded)}>
+          <span className="text-sm font-medium">{format(new Date(day.date + 'T12:00:00'), 'EEE, MMM d')}</span>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            {day.restingHeartRate && (
+              <span className="flex items-center gap-1">
+                <Heart className="w-3 h-3 text-red-400" />{day.restingHeartRate}
+              </span>
+            )}
+            {day.heartRateVariability && (
+              <span className="flex items-center gap-1">
+                <Activity className="w-3 h-3 text-violet-400" />{day.heartRateVariability}ms
+              </span>
+            )}
+            {sleepHrs && (
+              <span className="flex items-center gap-1">
+                <Moon className="w-3 h-3 text-blue-400" />{sleepHrs}
+              </span>
+            )}
+            <button className="p-0.5">
+              {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        </div>
+
+        {expanded && (
+          <div className="mt-2 pt-2 border-t border-border grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+            {day.restingHeartRate && (
+              <div className="flex items-center gap-1.5">
+                <Heart className="w-3.5 h-3.5 text-red-400" />
+                Resting HR: {day.restingHeartRate} bpm
+              </div>
+            )}
+            {day.heartRateVariability && (
+              <div className="flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-violet-400" />
+                HRV: {day.heartRateVariability} ms
+              </div>
+            )}
+            {sleepHrs && (
+              <div className="flex items-center gap-1.5">
+                <Moon className="w-3.5 h-3.5 text-blue-400" />
+                Sleep: {sleepHrs}
+              </div>
+            )}
+            {day.sleepDurationMinutes > 0 && (
+              <div className="flex items-center gap-1.5 text-[11px]">
+                <span className="ml-5">
+                  Deep {Math.round(day.sleepStages.deep)}m · Core {Math.round(day.sleepStages.core)}m · REM {Math.round(day.sleepStages.rem)}m
+                </span>
+              </div>
+            )}
+            {day.steps > 0 && (
+              <div className="flex items-center gap-1.5">
+                <Footprints className="w-3.5 h-3.5 text-emerald-400" />
+                Steps: {day.steps.toLocaleString()}
+              </div>
+            )}
+            {day.activeCalories > 0 && (
+              <div className="flex items-center gap-1.5">
+                <Flame className="w-3.5 h-3.5 text-orange-400" />
+                Active Cal: {day.activeCalories.toLocaleString()}
+              </div>
+            )}
+            {day.vo2Max && (
+              <div className="flex items-center gap-1.5">
+                <Wind className="w-3.5 h-3.5 text-cyan-400" />
+                VO2 Max: {day.vo2Max}
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Workout preview card ───────────────────────────────────────────
 
 function WorkoutPreviewCard({ workout, onToggle }: { workout: ParsedWorkout; onToggle: () => void }) {
   const [expanded, setExpanded] = useState(false)
