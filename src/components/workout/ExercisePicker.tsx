@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { Plus, ChevronDown, ChevronUp, X, ArrowUp, ArrowDown } from 'lucide-react'
+import { Plus, ChevronDown, ChevronUp, X, GripVertical } from 'lucide-react'
+import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -39,12 +41,45 @@ const customTypes: { value: CustomExerciseType; label: string }[] = [
   { value: 'band-reps', label: 'Band + Reps' },
 ]
 
+function SortableWorkoutItem({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style: React.CSSProperties = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transition: transition || undefined,
+    opacity: isDragging ? 0.5 : 1,
+    position: 'relative' as const,
+    zIndex: isDragging ? 10 : undefined,
+  }
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} className="flex items-center justify-between px-3 py-1.5 bg-background/50 rounded-md">
+      <div {...listeners} className="cursor-grab active:cursor-grabbing touch-none p-1 -ml-1 text-muted-foreground">
+        <GripVertical className="w-3.5 h-3.5" />
+      </div>
+      {children}
+    </div>
+  )
+}
+
 export function ExercisePicker({ selectedIds, customExercises, onToggle, onAddCustomExercise, onReorder, includeRun, onToggleRun, includeRow, onToggleRow, showCardio = true, compact }: ExercisePickerProps) {
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
   const [showCustomForm, setShowCustomForm] = useState(false)
   const [customName, setCustomName] = useState('')
   const [customType, setCustomType] = useState<CustomExerciseType>('reps-only')
   const [customSets, setCustomSets] = useState(3)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+  )
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (over && active.id !== over.id && onReorder) {
+      const oldIndex = customExercises.findIndex(e => e.id === active.id)
+      const newIndex = customExercises.findIndex(e => e.id === over.id)
+      if (oldIndex !== -1 && newIndex !== -1) onReorder(oldIndex, newIndex)
+    }
+  }
 
   function handleAddCustom() {
     if (!customName.trim()) return
@@ -220,40 +255,26 @@ export function ExercisePicker({ selectedIds, customExercises, onToggle, onAddCu
       {!compact && (customExercises.length > 0 || includeRun || includeRow) && (
         <div className="bg-secondary rounded-lg px-3 py-3 space-y-1">
           <span className="text-sm font-medium">Your Workout</span>
-          {customExercises.map((ex, i) => (
-            <div key={ex.id} className="flex items-center justify-between px-3 py-1.5 bg-background/50 rounded-md">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-xs text-muted-foreground tabular-nums w-4 shrink-0">{i + 1}</span>
-                <span className="text-sm truncate">{ex.name}</span>
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {ex.defaultSets}×{ex.defaultReps ? `${ex.defaultReps}` : ex.defaultDuration ? `${ex.defaultDuration}s` : ''}
-                </span>
-              </div>
-              <div className="flex items-center shrink-0">
-                {onReorder && (
-                  <>
-                    <button type="button" onClick={() => onReorder(i, i - 1)} disabled={i === 0}
-                      className={cn('p-1 text-muted-foreground', i === 0 && 'opacity-20')}>
-                      <ArrowUp className="w-3.5 h-3.5" />
-                    </button>
-                    <button type="button" onClick={() => onReorder(i, i + 1)} disabled={i === customExercises.length - 1}
-                      className={cn('p-1 text-muted-foreground', i === customExercises.length - 1 && 'opacity-20')}>
-                      <ArrowDown className="w-3.5 h-3.5" />
-                    </button>
-                  </>
-                )}
-                <button type="button" onClick={() => onToggle(ex)} className="p-1 text-muted-foreground hover:text-red-500">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          ))}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={customExercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
+              {customExercises.map((ex) => (
+                <SortableWorkoutItem key={ex.id} id={ex.id}>
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className="text-sm truncate">{ex.name}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {ex.defaultSets}×{ex.defaultReps ? `${ex.defaultReps}` : ex.defaultDuration ? `${ex.defaultDuration}s` : ''}
+                    </span>
+                  </div>
+                  <button type="button" onClick={() => onToggle(ex)} className="p-1 text-muted-foreground hover:text-red-500 shrink-0">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </SortableWorkoutItem>
+              ))}
+            </SortableContext>
+          </DndContext>
           {includeRun && (
             <div className="flex items-center justify-between px-3 py-1.5 bg-background/50 rounded-md">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground tabular-nums w-4">{customExercises.length + 1}</span>
-                <span className="text-sm">Run</span>
-              </div>
+              <span className="text-sm">Run</span>
               <button type="button" onClick={onToggleRun} className="p-1 text-muted-foreground hover:text-red-500 shrink-0">
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -261,10 +282,7 @@ export function ExercisePicker({ selectedIds, customExercises, onToggle, onAddCu
           )}
           {includeRow && (
             <div className="flex items-center justify-between px-3 py-1.5 bg-background/50 rounded-md">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground tabular-nums w-4">{customExercises.length + (includeRun ? 2 : 1)}</span>
-                <span className="text-sm">Row</span>
-              </div>
+              <span className="text-sm">Row</span>
               <button type="button" onClick={onToggleRow} className="p-1 text-muted-foreground hover:text-red-500 shrink-0">
                 <X className="w-3.5 h-3.5" />
               </button>

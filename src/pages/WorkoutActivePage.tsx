@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { format } from 'date-fns'
 import { ArrowLeft, Check, Trash2, Watch, CalendarDays, Plus, ChevronUp } from 'lucide-react'
+import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, useSortable, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -38,6 +40,22 @@ const workoutLabels: Record<string, string> = {
 }
 
 const allExerciseTemplates = [...strengthAExercises, ...strengthBExercises, ...prehabExercises]
+
+function SortableExerciseCard({ id, ...props }: { id: string } & React.ComponentProps<typeof ExerciseCard>) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style: React.CSSProperties = {
+    transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    transition: transition || undefined,
+    opacity: isDragging ? 0.5 : 1,
+    position: 'relative',
+    zIndex: isDragging ? 10 : undefined,
+  }
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <ExerciseCard {...props} dragHandleProps={listeners} />
+    </div>
+  )
+}
 
 export function WorkoutActivePage() {
   const { id } = useParams<{ id: string }>()
@@ -296,14 +314,33 @@ export function WorkoutActivePage() {
     setCustomExercises(exs => [...exs, exercise])
   }
 
-  // Reorder exercises in the custom workout list
+  // DnD sensors and drag end handler
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+  )
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (over && active.id !== over.id) {
+      setCustomExercises(prev => {
+        const oldIndex = prev.findIndex(e => e.id === active.id)
+        const newIndex = prev.findIndex(e => e.id === over.id)
+        return arrayMove(prev, oldIndex, newIndex)
+      })
+    }
+  }
+
+  // Remove an exercise from the workout (during logging)
+  function handleRemoveExercise(exerciseId: string) {
+    setCustomExercises(exs => exs.filter(e => e.id !== exerciseId))
+    setCustomSelectedIds(prev => { const next = new Set(prev); next.delete(exerciseId); return next })
+    setExerciseSets(prev => { const next = { ...prev }; delete next[exerciseId]; return next })
+  }
+
+  // Reorder exercises in the build phase "Your Workout" list (for ExercisePicker callback)
   function handleReorderExercise(fromIndex: number, toIndex: number) {
-    setCustomExercises(prev => {
-      const next = [...prev]
-      const [moved] = next.splice(fromIndex, 1)
-      next.splice(toIndex, 0, moved)
-      return next
-    })
+    setCustomExercises(prev => arrayMove(prev, fromIndex, toIndex))
   }
 
   // Template workout: toggle a non-template exercise on/off
@@ -635,25 +672,31 @@ export function WorkoutActivePage() {
       ))}
 
       {/* Custom workout without plan sections: flat list */}
-      {isCustom && !buildPhase && !hasPlanSections && customExercises.map((ex, i) => {
-        const coaching = coachingNotes[ex.id]
-        const exerciseWithNotes = coaching
-          ? { ...ex, notes: coaching + (ex.notes ? ` | ${ex.notes}` : '') }
-          : ex
-        return (
-          <ExerciseCard
-            key={ex.id}
-            exercise={exerciseWithNotes}
-            sets={exerciseSets[ex.id] || []}
-            lastSessionSets={lastSessionData[ex.id]}
-            onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
-            onAddSet={() => handleAddSet(ex.id)}
-            onRemoveSet={() => handleRemoveSet(ex.id)}
-            onMoveUp={!workout.completedAt && i > 0 ? () => handleReorderExercise(i, i - 1) : undefined}
-            onMoveDown={!workout.completedAt && i < customExercises.length - 1 ? () => handleReorderExercise(i, i + 1) : undefined}
-          />
-        )
-      })}
+      {isCustom && !buildPhase && !hasPlanSections && (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={customExercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
+            {customExercises.map((ex) => {
+              const coaching = coachingNotes[ex.id]
+              const exerciseWithNotes = coaching
+                ? { ...ex, notes: coaching + (ex.notes ? ` | ${ex.notes}` : '') }
+                : ex
+              return (
+                <SortableExerciseCard
+                  id={ex.id}
+                  key={ex.id}
+                  exercise={exerciseWithNotes}
+                  sets={exerciseSets[ex.id] || []}
+                  lastSessionSets={lastSessionData[ex.id]}
+                  onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
+                  onAddSet={() => handleAddSet(ex.id)}
+                  onRemoveSet={() => handleRemoveSet(ex.id)}
+                  onRemoveExercise={!workout.completedAt ? () => handleRemoveExercise(ex.id) : undefined}
+                />
+              )
+            })}
+          </SortableContext>
+        </DndContext>
+      )}
 
       {/* Non-plan custom workout: run/row at the end */}
       {isCustom && !buildPhase && !hasPlanSections && includeRun && (
@@ -672,19 +715,23 @@ export function WorkoutActivePage() {
       {/* Exercise-based template workouts (non-custom) */}
       {!isCustom && isExerciseBased && (
         <>
-          {customExercises.map((ex, i) => (
-            <ExerciseCard
-              key={ex.id}
-              exercise={ex}
-              sets={exerciseSets[ex.id] || []}
-              lastSessionSets={lastSessionData[ex.id]}
-              onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
-              onAddSet={() => handleAddSet(ex.id)}
-              onRemoveSet={() => handleRemoveSet(ex.id)}
-              onMoveUp={!workout.completedAt && i > 0 ? () => handleReorderExercise(i, i - 1) : undefined}
-              onMoveDown={!workout.completedAt && i < customExercises.length - 1 ? () => handleReorderExercise(i, i + 1) : undefined}
-            />
-          ))}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={customExercises.map(e => e.id)} strategy={verticalListSortingStrategy}>
+              {customExercises.map((ex) => (
+                <SortableExerciseCard
+                  id={ex.id}
+                  key={ex.id}
+                  exercise={ex}
+                  sets={exerciseSets[ex.id] || []}
+                  lastSessionSets={lastSessionData[ex.id]}
+                  onUpdateSet={(setIndex, data) => handleUpdateSet(ex.id, setIndex, data)}
+                  onAddSet={() => handleAddSet(ex.id)}
+                  onRemoveSet={() => handleRemoveSet(ex.id)}
+                  onRemoveExercise={!workout.completedAt ? () => handleRemoveExercise(ex.id) : undefined}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
 
           {/* Add exercise to template workout */}
           {!workout.completedAt && (

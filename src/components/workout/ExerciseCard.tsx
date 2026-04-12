@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronUp, MessageSquare, Plus, Minus, ArrowUp, ArrowDown } from 'lucide-react'
+import { ChevronDown, ChevronUp, MessageSquare, Plus, Minus, GripVertical, X } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Stepper } from './Stepper'
@@ -23,8 +23,9 @@ interface ExerciseCardProps {
   onUpdateSet: (setIndex: number, data: Partial<SetData>) => void
   onAddSet?: () => void
   onRemoveSet?: () => void
-  onMoveUp?: () => void
-  onMoveDown?: () => void
+  onRemoveExercise?: () => void
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  dragHandleProps?: any
 }
 
 const bandColors: Record<BandResistance, string> = {
@@ -33,7 +34,7 @@ const bandColors: Record<BandResistance, string> = {
   heavy: 'bg-red-600',
 }
 
-export function ExerciseCard({ exercise, sets, lastSessionSets, onUpdateSet, onAddSet, onRemoveSet, onMoveUp, onMoveDown }: ExerciseCardProps) {
+export function ExerciseCard({ exercise, sets, lastSessionSets, onUpdateSet, onAddSet, onRemoveSet, onRemoveExercise, dragHandleProps }: ExerciseCardProps) {
   const [expanded, setExpanded] = useState(true)
   const [showNotes, setShowNotes] = useState<number | null>(null)
   const completedCount = sets.filter(s => s.completed).length
@@ -52,6 +53,11 @@ export function ExerciseCard({ exercise, sets, lastSessionSets, onUpdateSet, onA
         className="w-full px-4 py-3 flex items-center justify-between text-left cursor-pointer"
         onClick={() => setExpanded(!expanded)}
       >
+        {dragHandleProps && (
+          <div {...dragHandleProps} className="cursor-grab active:cursor-grabbing touch-none p-1 -ml-2 mr-1 text-muted-foreground" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+            <GripVertical className="w-4 h-4" />
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <div className="font-medium text-sm leading-tight">{exercise.name}</div>
           {lastSessionSummary && (
@@ -64,18 +70,6 @@ export function ExerciseCard({ exercise, sets, lastSessionSets, onUpdateSet, onA
           )}
         </div>
         <div className="flex items-center gap-2">
-          {(onMoveUp || onMoveDown) && (
-            <div className="flex items-center" onClick={e => e.stopPropagation()}>
-              <button type="button" disabled={!onMoveUp} onClick={onMoveUp}
-                className={cn('p-1 text-muted-foreground touch-manipulation', !onMoveUp && 'opacity-20')}>
-                <ArrowUp className="w-3.5 h-3.5" />
-              </button>
-              <button type="button" disabled={!onMoveDown} onClick={onMoveDown}
-                className={cn('p-1 text-muted-foreground touch-manipulation', !onMoveDown && 'opacity-20')}>
-                <ArrowDown className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
           <Badge
             variant="secondary"
             className={cn(
@@ -86,6 +80,11 @@ export function ExerciseCard({ exercise, sets, lastSessionSets, onUpdateSet, onA
             {completedCount}/{sets.length}
           </Badge>
           {exercise.isOptional && <Badge variant="secondary" className="text-xs">Optional</Badge>}
+          {onRemoveExercise && (
+            <button type="button" onClick={(e) => { e.stopPropagation(); onRemoveExercise(); }} className="p-1 text-muted-foreground hover:text-red-500">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
           {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </div>
       </div>
