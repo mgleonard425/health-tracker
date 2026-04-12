@@ -67,10 +67,11 @@ export function RecoveryCard() {
 
   if (!recentMetrics || recentMetrics.length === 0) return null
 
-  const latest = recentMetrics[0]
-  if (!latest.restingHeartRate && !latest.heartRateVariability && !latest.sleepDurationMinutes && !latest.vo2Max) {
-    return null
-  }
+  // Find the most recent day with meaningful recovery data (not just steps)
+  const latest = recentMetrics.find(
+    m => m.restingHeartRate || m.heartRateVariability || m.sleepDurationMinutes || m.vo2Max
+  )
+  if (!latest) return null
 
   // Calculate 7-day averages (excluding today)
   const older = recentMetrics.filter(m => m.date !== today).slice(0, 6)
