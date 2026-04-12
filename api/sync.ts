@@ -31,8 +31,8 @@ async function readBlob(key: string): Promise<unknown | null> {
     const { blobs } = await list({ prefix: key, limit: 1 })
     if (blobs.length === 0) return null
     const response = await get(blobs[0].url, { access: 'private' })
-    if (!response) return null
-    const text = await new Response(response.body).text()
+    if (!response || response.statusCode !== 200) return null
+    const text = await new Response(response.stream).text()
     return JSON.parse(text)
   } catch {
     return null
@@ -77,9 +77,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         debugInfo.listResult = blobs.map(b => ({ url: b.url, pathname: b.pathname, size: b.size }))
         if (blobs.length > 0) {
           const response = await get(blobs[0].url, { access: 'private' })
-          debugInfo.getResult = response ? 'ok' : 'null'
-          if (response) {
-            const text = await new Response(response.body).text()
+          debugInfo.getResult = response ? `status:${response.statusCode}` : 'null'
+          if (response && response.statusCode === 200) {
+            const text = await new Response(response.stream).text()
             debugInfo.dataLength = text.length
             debugInfo.dataPreview = text.slice(0, 200)
           }
