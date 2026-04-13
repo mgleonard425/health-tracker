@@ -13,6 +13,7 @@ import { PlanWorkoutPage } from '@/pages/PlanWorkoutPage'
 import { ImportPlanPage } from '@/pages/ImportPlanPage'
 import { ImportWatchPage } from '@/pages/ImportWatchPage'
 import { ImportHealthPage } from '@/pages/ImportHealthPage'
+import { CoachPage } from '@/pages/CoachPage'
 
 export default function App() {
   return (
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/import-health" element={<ImportHealthPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/coach" element={<CoachPage />} />
       </Routes>
     </AppShell>
   )

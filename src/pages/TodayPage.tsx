@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { format } from 'date-fns'
-import { Dumbbell, Footprints, Timer, Heart, ClipboardCheck, Waves, Shuffle, Play, FileText } from 'lucide-react'
+import { Dumbbell, Footprints, Timer, Heart, ClipboardCheck, Waves, Shuffle, Play, FileText, Settings } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -70,9 +70,14 @@ export function TodayPage() {
             {weekPlan.isDownWeek && <Badge variant="secondary" className="ml-2">Down Week</Badge>}
           </p>
         </div>
-        <div className="text-right">
-          <div className="text-2xl font-bold text-orange-500">{daysUntilRace}</div>
-          <div className="text-xs text-muted-foreground">days to race</div>
+        <div className="flex items-start gap-3">
+          <div className="text-right">
+            <div className="text-2xl font-bold text-orange-500">{daysUntilRace}</div>
+            <div className="text-xs text-muted-foreground">days to race</div>
+          </div>
+          <button onClick={() => navigate('/settings')} className="p-1.5 text-muted-foreground hover:text-foreground mt-0.5">
+            <Settings className="w-5 h-5" />
+          </button>
         </div>
       </div>
 

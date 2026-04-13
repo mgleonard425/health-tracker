@@ -131,6 +131,21 @@ export interface CoachingNote {
   dismissed: boolean
 }
 
+export interface CoachConversation {
+  id?: number
+  title: string              // first 50 chars of first user message
+  createdAt: string          // ISO datetime
+  updatedAt: string          // ISO datetime
+}
+
+export interface CoachMessage {
+  id?: number
+  conversationId: number     // FK to CoachConversation
+  role: 'user' | 'assistant'
+  content: string
+  createdAt: string          // ISO datetime
+}
+
 export interface WatchMetrics {
   id?: number
   date: string              // YYYY-MM-DD
@@ -197,6 +212,8 @@ class HealthTrackerDB extends Dexie {
   watchMetrics!: Table<WatchMetrics>
   healthMetrics!: Table<HealthMetrics>
   coachingNotes!: Table<CoachingNote>
+  coachConversations!: Table<CoachConversation>
+  coachMessages!: Table<CoachMessage>
 
   constructor() {
     super('HealthTrackerDB')
@@ -246,6 +263,22 @@ class HealthTrackerDB extends Dexie {
       watchMetrics: '++id, date, workoutId, startTime',
       healthMetrics: '++id, &date',
       coachingNotes: '++id, createdAt',
+    })
+    this.version(5).stores({
+      workouts: '++id, date, type, [date+type]',
+      exerciseSets: '++id, workoutId, exerciseId, [workoutId+exerciseId]',
+      runDetails: '++id, workoutId',
+      rowDetails: '++id, workoutId',
+      yogaMobilityDetails: '++id, workoutId',
+      dailyCheckIns: '++id, &date',
+      mealLogs: '++id, date, [date+timeOfDay]',
+      favoriteMeals: '++id, name, usageCount',
+      workoutPlans: '++id, name, createdAt',
+      watchMetrics: '++id, date, workoutId, startTime',
+      healthMetrics: '++id, &date',
+      coachingNotes: '++id, createdAt',
+      coachConversations: '++id, updatedAt',
+      coachMessages: '++id, conversationId',
     })
   }
 }
