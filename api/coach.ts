@@ -1,6 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { COACHING_SYSTEM_PROMPT } from './coaching-prompt'
 
 export const config = {
   maxDuration: 60,
@@ -35,6 +33,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { messages, dataContext } = req.body || {}
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'Missing or empty messages array' })
+  }
+
+  // Lazy import to isolate loading errors
+  let Anthropic: typeof import('@anthropic-ai/sdk').default
+  let COACHING_SYSTEM_PROMPT: string
+  try {
+    Anthropic = (await import('@anthropic-ai/sdk')).default
+    COACHING_SYSTEM_PROMPT = (await import('./coaching-prompt')).COACHING_SYSTEM_PROMPT
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return res.status(500).json({ error: `Module load error: ${msg}` })
   }
 
   const systemPrompt = dataContext
@@ -78,7 +87,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
-    // If headers already sent as SSE, write as event; otherwise JSON error
     if (res.headersSent) {
       res.write(`event: error\ndata: ${JSON.stringify({ error: message })}\n\n`)
       res.end()
