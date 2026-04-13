@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { COACHING_SYSTEM_PROMPT } from './coaching-prompt'
 
@@ -47,6 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Connection', 'keep-alive')
 
   try {
+    const Anthropic = (await import('@anthropic-ai/sdk')).default
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
     const stream = client.messages.stream({
