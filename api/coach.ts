@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { COACHING_SYSTEM_PROMPT } from './coaching-prompt'
+
+const COACHING_SYSTEM_PROMPT = 'You are a fitness coach. Be helpful and concise.'
 
 export const config = {
   maxDuration: 60,
