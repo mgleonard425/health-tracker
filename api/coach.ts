@@ -1,6 +1,6 @@
+import Anthropic from '@anthropic-ai/sdk'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-
-const COACHING_SYSTEM_PROMPT = 'You are a fitness coach. Be helpful and concise.'
+import { COACHING_SYSTEM_PROMPT } from './coaching-prompt'
 
 export const config = {
   maxDuration: 60,
@@ -47,11 +47,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Connection', 'keep-alive')
 
   try {
-    const Anthropic = (await import('@anthropic-ai/sdk')).default
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
     const stream = client.messages.stream({
-      model: 'claude-sonnet-4-6-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       system: systemPrompt,
       messages: messages.map((m: { role: string; content: string }) => ({
