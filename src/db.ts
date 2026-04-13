@@ -146,6 +146,31 @@ export interface CoachMessage {
   createdAt: string          // ISO datetime
 }
 
+export interface KnowledgeEntry {
+  id?: number
+  category: string           // "clinical", "training", "profile", etc.
+  title: string
+  content: string            // plain text / markdown
+  createdAt: string          // ISO datetime
+  updatedAt: string          // ISO datetime
+}
+
+export const KNOWLEDGE_CATEGORIES: { id: string; label: string }[] = [
+  { id: 'profile', label: 'Profile' },
+  { id: 'clinical', label: 'Clinical' },
+  { id: 'training', label: 'Training Plan' },
+  { id: 'strength', label: 'Strength' },
+  { id: 'mobility', label: 'Mobility' },
+  { id: 'nutrition', label: 'Nutrition' },
+  { id: 'cross-training', label: 'Cross-Training' },
+  { id: 'race', label: 'Race Strategy' },
+  { id: 'medical', label: 'Medical' },
+  { id: 'gear', label: 'Gear' },
+  { id: 'routes', label: 'Routes' },
+  { id: 'red-flags', label: 'Red Flags' },
+  { id: 'other', label: 'Other' },
+]
+
 export interface WatchMetrics {
   id?: number
   date: string              // YYYY-MM-DD
@@ -214,6 +239,7 @@ class HealthTrackerDB extends Dexie {
   coachingNotes!: Table<CoachingNote>
   coachConversations!: Table<CoachConversation>
   coachMessages!: Table<CoachMessage>
+  knowledgeEntries!: Table<KnowledgeEntry>
 
   constructor() {
     super('HealthTrackerDB')
@@ -279,6 +305,23 @@ class HealthTrackerDB extends Dexie {
       coachingNotes: '++id, createdAt',
       coachConversations: '++id, updatedAt',
       coachMessages: '++id, conversationId',
+    })
+    this.version(6).stores({
+      workouts: '++id, date, type, [date+type]',
+      exerciseSets: '++id, workoutId, exerciseId, [workoutId+exerciseId]',
+      runDetails: '++id, workoutId',
+      rowDetails: '++id, workoutId',
+      yogaMobilityDetails: '++id, workoutId',
+      dailyCheckIns: '++id, &date',
+      mealLogs: '++id, date, [date+timeOfDay]',
+      favoriteMeals: '++id, name, usageCount',
+      workoutPlans: '++id, name, createdAt',
+      watchMetrics: '++id, date, workoutId, startTime',
+      healthMetrics: '++id, &date',
+      coachingNotes: '++id, createdAt',
+      coachConversations: '++id, updatedAt',
+      coachMessages: '++id, conversationId',
+      knowledgeEntries: '++id, category, updatedAt',
     })
   }
 }

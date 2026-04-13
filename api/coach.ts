@@ -1,6 +1,10 @@
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import Anthropic from '@anthropic-ai/sdk'
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { COACHING_SYSTEM_PROMPT } from './coaching-prompt'
+
+// nft traces readFileSync with __dirname — reliable bundling
+const CORE_PROMPT = readFileSync(join(__dirname, 'coaching-core-prompt.txt'), 'utf-8')
 
 export const config = {
   maxDuration: 60,
@@ -37,9 +41,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing or empty messages array' })
   }
 
+  // Build system prompt: core persona + knowledge/data context from client
   const systemPrompt = dataContext
-    ? COACHING_SYSTEM_PROMPT + '\n\n---\n\n## CURRENT DATA\n\n' + dataContext
-    : COACHING_SYSTEM_PROMPT
+    ? CORE_PROMPT + '\n\n---\n\n' + dataContext
+    : CORE_PROMPT
 
   // SSE headers
   res.setHeader('Content-Type', 'text/event-stream')

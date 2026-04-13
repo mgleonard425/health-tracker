@@ -14,6 +14,8 @@ import { ImportPlanPage } from '@/pages/ImportPlanPage'
 import { ImportWatchPage } from '@/pages/ImportWatchPage'
 import { ImportHealthPage } from '@/pages/ImportHealthPage'
 import { CoachPage } from '@/pages/CoachPage'
+import { MemoryPage } from '@/pages/MemoryPage'
+import { MemoryEditPage } from '@/pages/MemoryEditPage'
 
 export default function App() {
   return (
@@ -34,6 +36,9 @@ export default function App() {
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/coach" element={<CoachPage />} />
+        <Route path="/memory" element={<MemoryPage />} />
+        <Route path="/memory/new" element={<MemoryEditPage />} />
+        <Route path="/memory/edit/:id" element={<MemoryEditPage />} />
       </Routes>
     </AppShell>
   )

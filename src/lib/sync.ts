@@ -48,6 +48,7 @@ async function buildSnapshot() {
     workoutPlans: await db.workoutPlans.toArray(),
     watchMetrics: await db.watchMetrics.toArray(),
     healthMetrics: await db.healthMetrics.toArray(),
+    knowledgeEntries: await db.knowledgeEntries.toArray(),
   }
 }
 

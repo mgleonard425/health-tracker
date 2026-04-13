@@ -1,9 +1,10 @@
 import { format, subDays } from 'date-fns'
 import { db } from '@/db'
+import { KNOWLEDGE_CATEGORIES } from '@/db'
 import { getCurrentWeekNumber, getCurrentWeekPlan, getDaysUntilRace, getTodaySchedule } from '@/data/training-plan'
 
 /**
- * Builds a structured markdown summary of recent training data from Dexie.
+ * Builds a structured markdown summary of knowledge base + recent training data from Dexie.
  * Sent with each coaching API call so the agent has current context.
  */
 export async function buildCoachingContext(): Promise<string> {
@@ -11,6 +12,31 @@ export async function buildCoachingContext(): Promise<string> {
   const today = format(now, 'yyyy-MM-dd')
   const fourteenDaysAgo = format(subDays(now, 14), 'yyyy-MM-dd')
   const sections: string[] = []
+
+  // --- Knowledge base entries ---
+  const allEntries = await db.knowledgeEntries.toArray()
+  if (allEntries.length > 0) {
+    const byCategory = new Map<string, typeof allEntries>()
+    for (const entry of allEntries) {
+      const existing = byCategory.get(entry.category) || []
+      existing.push(entry)
+      byCategory.set(entry.category, existing)
+    }
+
+    const knowledgeLines: string[] = []
+    const categoryLabels = new Map(KNOWLEDGE_CATEGORIES.map(c => [c.id, c.label]))
+
+    for (const [catId, entries] of byCategory) {
+      const label = categoryLabels.get(catId) || catId
+      knowledgeLines.push(`### ${label}`)
+      for (const entry of entries) {
+        knowledgeLines.push(`**${entry.title}**`)
+        knowledgeLines.push(entry.content)
+        knowledgeLines.push('')
+      }
+    }
+    sections.push(`## KNOWLEDGE BASE\n\n${knowledgeLines.join('\n')}`)
+  }
 
   // --- Current plan status ---
   const weekNumber = getCurrentWeekNumber()
